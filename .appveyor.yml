@@ -5,8 +5,8 @@ platform:
 before_build:
   - mkdir build
   - cd build
-  - find /c/Libraries/LLVM-4.0.0
-  - find /c/Program\ Files/LLVM
+  - dir /s "C:/Libraries/LLVM-4.0.0"
+  - dir /s "C:/Program Files/LLVM"
   - cmake ..
 build:
   project: build/zig.sln
