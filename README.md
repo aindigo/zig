@@ -1,4 +1,4 @@
-![ZIG](http://ziglang.org/zig-logo.svg)
+![ZIG](http://ziglang.org/zig-logo.svg) [![Build Status](https://travis-ci.org/andrewrk/zig.svg?branch=master)](https://travis-ci.org/andrewrk/zig)
 
 A system programming language which prioritizes optimality, safety, and
 readability.
