@@ -1,4 +1,11 @@
 platform:
   - x86
   - x64
-
+before_build:
+  - mkdir build
+  - cd build
+  - cmake ..
+build:
+  project: build/zig.sln
+after_build:
+  - ./zig build --build-file ../build.zig test
