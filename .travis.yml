@@ -5,10 +5,7 @@ before_install:
   - wget -O - http://apt.llvm.org/llvm-snapshot.gpg.key|sudo apt-key add -
   - sudo apt-get update -q
 install:
-  - apt-cache search clang
-  - apt-cache search llvm
-  - apt-cache search lld
-  - sudo apt-get install -y libclang-4.0-dev libllvm-4.0-dev liblld-4.0-dev cmake
+  - sudo apt-get install -y libclang-4.0-dev llvm-4.0-dev liblld-4.0-dev cmake
 script:
   - mkdir build
   - cd build
