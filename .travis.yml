@@ -5,6 +5,7 @@ before_install:
   - wget -O - http://apt.llvm.org/llvm-snapshot.gpg.key|sudo apt-key add -
   - sudo apt-get update -q
 install:
+  - sudo apt-get remove -y clang-*
   - sudo apt-get install -y clang-4.0 libclang-4.0 libclang-4.0-dev llvm-4.0 llvm-4.0-dev liblld-4.0 liblld-4.0-dev cmake
   - find /usr/bin -name "clang*"
   - find /usr/local/bin -name "clang*"
