@@ -1,4 +1,4 @@
-![ZIG](http://ziglang.org/zig-logo.svg) [![Build Status](https://travis-ci.org/andrewrk/zig.svg?branch=master)](https://travis-ci.org/andrewrk/zig)
+![ZIG](http://ziglang.org/zig-logo.svg)
 
 A system programming language which prioritizes optimality, safety, and
 readability.
@@ -71,6 +71,8 @@ compromises backward compatibility.
  * Email list: [ziglang@googlegroups.com](https://groups.google.com/forum/#!forum/ziglang)
 
 ## Building
+
+[![Build Status](https://travis-ci.org/andrewrk/zig.svg?branch=master)](https://travis-ci.org/andrewrk/zig) 
 
 ### Dependencies
 
