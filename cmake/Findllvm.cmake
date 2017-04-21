@@ -7,7 +7,12 @@
 # LLVM_LIBRARIES
 # LLVM_LIBDIRS
 
-find_program(LLVM_CONFIG_EXE NAMES llvm-config llvm-config-4.0)
+find_program(LLVM_CONFIG_EXE
+    NAMES llvm-config llvm-config-4.0
+    PATHS
+        "C:/Libraries/llvm-4.0.0"
+        "C:/Libraries/llvm-4.0.0/bin"
+        "C:/Program\ Files/LLVM/bin")
 
 execute_process(
     COMMAND ${LLVM_CONFIG_EXE} --libs
