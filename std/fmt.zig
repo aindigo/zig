@@ -304,9 +304,9 @@ pub fn parseUnsigned(comptime T: type, buf: []const u8, radix: u8) -> %T {
     var x: T = 0;
 
     for (buf) |c| {
-        const digit = %return charToDigit(c, radix);
-        x = %return math.mulOverflow(T, x, radix);
-        x = %return math.addOverflow(T, x, digit);
+        const digit = tryreturn charToDigit(c, radix);
+        x = tryreturn math.mulOverflow(T, x, radix);
+        x = tryreturn math.addOverflow(T, x, digit);
     }
 
     return x;
@@ -353,7 +353,7 @@ pub fn bufPrint(buf: []u8, comptime fmt: []const u8, args: ...) {
 pub fn allocPrint(allocator: &mem.Allocator, comptime fmt: []const u8, args: ...) -> %[]u8 {
     var size: usize = 0;
     _ = format(&size, countSize, fmt, args);
-    const buf = %return allocator.alloc(u8, size);
+    const buf = tryreturn allocator.alloc(u8, size);
     bufPrint(buf, fmt, args);
     return buf;
 }

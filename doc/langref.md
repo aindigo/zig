@@ -45,7 +45,7 @@ TypeExpr = PrefixOpExpression | "var"
 
 BlockOrExpression = Block | Expression
 
-Expression = ReturnExpression | AssignmentExpression
+Expression = "return" option(Expression) | AssignmentExpression
 
 AsmExpression = "asm" option("volatile") "(" String option(AsmOutput) ")"
 
@@ -84,8 +84,6 @@ WhileExpression(body) = "while" "(" Expression option(";" Expression) ")" body
 ForExpression(body) = "for" "(" Expression ")" option("|" option("*") Symbol option("," Symbol) "|") body
 
 BoolOrExpression = BoolAndExpression "or" BoolOrExpression | BoolAndExpression
-
-ReturnExpression = option("%") "return" option(Expression)
 
 Defer(body) = option("%") "defer" body
 
@@ -141,7 +139,7 @@ ContainerInitBody = list(StructLiteralField, ",") | list(Expression, ",")
 
 StructLiteralField = "." Symbol "=" Expression
 
-PrefixOp = "!" | "-" | "~" | "*" | ("&" option("const") option("volatile")) | "?" | "%" | "%%" | "??" | "-%"
+PrefixOp = "!" | "-" | "~" | "*" | ("&" option("const") option("volatile")) | "?" | "%" | "%%" | "??" | "-%" | "tryreturn"
 
 PrimaryExpression = Number | String | CharLiteral | KeywordLiteral | GroupedExpression | GotoExpression | BlockExpression(BlockOrExpression) | Symbol | ("@" Symbol FnCallExpression) | ArrayType | (option("extern") FnProto) | AsmExpression | ("error" "." Symbol) | ContainerDecl
 
@@ -161,7 +159,7 @@ ContainerDecl = option("extern" | "packed") ("struct" | "enum" | "union") "{" ma
 ```
 inline x
 x() x[] x.y
-!x -x -%x ~x *x &x ?x %x %%x ??x
+!x -x -%x ~x *x &x ?x %x %%x ??x tryreturn x
 x{}
 * / % ** *%
 + - ++ +% -%

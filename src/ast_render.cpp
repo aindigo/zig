@@ -75,6 +75,7 @@ static const char *prefix_op_str(PrefixOp prefix_op) {
         case PrefixOpError: return "%";
         case PrefixOpUnwrapError: return "%%";
         case PrefixOpUnwrapMaybe: return "??";
+        case PrefixOpTryReturn: return "tryreturn ";
     }
     zig_unreachable();
 }
@@ -91,7 +92,7 @@ static const char *visib_mod_string(VisibMod mod) {
 static const char *return_string(ReturnKind kind) {
     switch (kind) {
         case ReturnKindUnconditional: return "return";
-        case ReturnKindError: return "%return";
+        case ReturnKindError: return "tryreturn";
     }
     zig_unreachable();
 }

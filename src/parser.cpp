@@ -220,7 +220,6 @@ static AstNode *ast_parse_block_expr(ParseContext *pc, size_t *token_index, bool
 static AstNode *ast_parse_unwrap_expr(ParseContext *pc, size_t *token_index, bool mandatory);
 static AstNode *ast_parse_prefix_op_expr(ParseContext *pc, size_t *token_index, bool mandatory);
 static AstNode *ast_parse_fn_proto(ParseContext *pc, size_t *token_index, bool mandatory, VisibMod visib_mod);
-static AstNode *ast_parse_return_expr(ParseContext *pc, size_t *token_index);
 static AstNode *ast_parse_grouped_expr(ParseContext *pc, size_t *token_index, bool mandatory);
 static AstNode *ast_parse_container_decl(ParseContext *pc, size_t *token_index, bool mandatory);
 
@@ -1063,6 +1062,7 @@ static PrefixOp tok_to_prefix_op(Token *token) {
         case TokenIdPercentPercent: return PrefixOpUnwrapError;
         case TokenIdDoubleQuestion: return PrefixOpUnwrapMaybe;
         case TokenIdStarStar: return PrefixOpDereference;
+        case TokenIdTryReturn: return PrefixOpTryReturn;
         default: return PrefixOpInvalid;
     }
 }
@@ -1076,13 +1076,6 @@ static AstNode *ast_parse_prefix_op_expr(ParseContext *pc, size_t *token_index, 
     PrefixOp prefix_op = tok_to_prefix_op(token);
     if (prefix_op == PrefixOpInvalid) {
         return ast_parse_suffix_op_expr(pc, token_index, mandatory);
-    }
-
-    if (prefix_op == PrefixOpError || prefix_op == PrefixOpMaybe) {
-        Token *maybe_return = &pc->tokens->at(*token_index + 1);
-        if (maybe_return->id == TokenIdKeywordReturn) {
-            return ast_parse_return_expr(pc, token_index);
-        }
     }
 
     *token_index += 1;
@@ -1464,33 +1457,15 @@ static AstNode *ast_parse_if_expr(ParseContext *pc, size_t *token_index, bool ma
 }
 
 /*
-ReturnExpression : option("%") "return" option(Expression)
+ReturnExpression = "return" option(Expression)
 */
 static AstNode *ast_parse_return_expr(ParseContext *pc, size_t *token_index) {
     Token *token = &pc->tokens->at(*token_index);
-
-    NodeType node_type;
-    ReturnKind kind;
-
-    if (token->id == TokenIdPercent) {
-        Token *next_token = &pc->tokens->at(*token_index + 1);
-        if (next_token->id == TokenIdKeywordReturn) {
-            kind = ReturnKindError;
-            node_type = NodeTypeReturnExpr;
-            *token_index += 2;
-        } else {
-            return nullptr;
-        }
-    } else if (token->id == TokenIdKeywordReturn) {
-        kind = ReturnKindUnconditional;
-        node_type = NodeTypeReturnExpr;
-        *token_index += 1;
-    } else {
+    if (token->id != TokenIdKeywordReturn)
         return nullptr;
-    }
+    *token_index += 1;
 
-    AstNode *node = ast_create_node(pc, node_type, token);
-    node->data.return_expr.kind = kind;
+    AstNode *node = ast_create_node(pc, NodeTypeReturnExpr, token);
     node->data.return_expr.expr = ast_parse_expression(pc, token_index, false);
 
     return node;
@@ -2010,7 +1985,7 @@ static AstNode *ast_parse_block_or_expression(ParseContext *pc, size_t *token_in
 }
 
 /*
-Expression = ReturnExpression | AssignmentExpression
+Expression = "return" option(Expression) | AssignmentExpression
 */
 static AstNode *ast_parse_expression(ParseContext *pc, size_t *token_index, bool mandatory) {
     Token *token = &pc->tokens->at(*token_index);

@@ -19,7 +19,7 @@ pub fn join(allocator: &Allocator, paths: ...) -> %[]u8 {
         }
     }
 
-    const buf = %return allocator.alloc(u8, total_paths_len);
+    const buf = tryreturn allocator.alloc(u8, total_paths_len);
     %defer allocator.free(buf);
 
     var buf_index: usize = 0;
@@ -88,11 +88,11 @@ pub fn resolveSlice(allocator: &Allocator, paths: []const []const u8) -> %[]u8 {
     var result_index: usize = 0;
 
     if (have_abs) {
-        result = %return allocator.alloc(u8, max_size);
+        result = tryreturn allocator.alloc(u8, max_size);
     } else {
-        const cwd = %return os.getCwd(allocator);
+        const cwd = tryreturn os.getCwd(allocator);
         defer allocator.free(cwd);
-        result = %return allocator.alloc(u8, max_size + cwd.len + 1);
+        result = tryreturn allocator.alloc(u8, max_size + cwd.len + 1);
         mem.copy(u8, result, cwd);
         result_index += cwd.len;
     }

@@ -76,7 +76,7 @@ pub const OutStream = struct {
         switch (@compileVar("os")) {
             Os.linux, Os.darwin, Os.macosx, Os.ios => {
                 const flags = system.O_LARGEFILE|system.O_WRONLY|system.O_CREAT|system.O_CLOEXEC|system.O_TRUNC;
-                const fd = %return os.posixOpen(path, flags, 0o666, allocator);
+                const fd = tryreturn os.posixOpen(path, flags, 0o666, allocator);
                 return OutStream {
                     .fd = fd,
                     .index = 0,
@@ -89,14 +89,14 @@ pub const OutStream = struct {
     }
 
     pub fn writeByte(self: &OutStream, b: u8) -> %void {
-        if (self.buffer.len == self.index) %return self.flush();
+        if (self.buffer.len == self.index) tryreturn self.flush();
         self.buffer[self.index] = b;
         self.index += 1;
     }
 
     pub fn write(self: &OutStream, bytes: []const u8) -> %void {
         if (bytes.len >= self.buffer.len) {
-            %return self.flush();
+            tryreturn self.flush();
             return os.posixWrite(self.fd, bytes);
         }
 
@@ -109,7 +109,7 @@ pub const OutStream = struct {
             self.index += copy_amt;
             assert(self.index <= self.buffer.len);
             if (self.index == self.buffer.len) {
-                %return self.flush();
+                tryreturn self.flush();
             }
             src_index += copy_amt;
         }
@@ -117,8 +117,8 @@ pub const OutStream = struct {
 
     /// Calls print and then flushes the buffer.
     pub fn printf(self: &OutStream, comptime format: []const u8, args: ...) -> %void {
-        %return self.print(format, args);
-        %return self.flush();
+        tryreturn self.print(format, args);
+        tryreturn self.flush();
     }
 
     /// Does not flush the buffer.
@@ -144,7 +144,7 @@ pub const OutStream = struct {
 
     pub fn flush(self: &OutStream) -> %void {
         if (self.index != 0) {
-            %return os.posixWrite(self.fd, self.buffer[0...self.index]);
+            tryreturn os.posixWrite(self.fd, self.buffer[0...self.index]);
             self.index = 0;
         }
     }
@@ -173,7 +173,7 @@ pub const InStream = struct {
         switch (@compileVar("os")) {
             Os.linux, Os.darwin, Os.macosx, Os.ios => {
                 const flags = system.O_LARGEFILE|system.O_RDONLY;
-                const fd = %return os.posixOpen(path, flags, 0, allocator);
+                const fd = tryreturn os.posixOpen(path, flags, 0, allocator);
                 return InStream {
                     .fd = fd,
                 };
@@ -222,19 +222,19 @@ pub const InStream = struct {
     }
 
     pub fn readNoEof(is: &InStream, buf: []u8) -> %void {
-        const amt_read = %return is.read(buf);
+        const amt_read = tryreturn is.read(buf);
         if (amt_read < buf.len) return error.EndOfFile;
     }
 
     pub fn readByte(is: &InStream) -> %u8 {
         var result: [1]u8 = undefined;
-        %return is.readNoEof(result[0...]);
+        tryreturn is.readNoEof(result[0...]);
         return result[0];
     }
 
     pub fn readByteSigned(is: &InStream) -> %i8 {
         var result: [1]i8 = undefined;
-        %return is.readNoEof(([]u8)(result[0...]));
+        tryreturn is.readNoEof(([]u8)(result[0...]));
         return result[0];
     }
 
@@ -248,7 +248,7 @@ pub const InStream = struct {
 
     pub fn readInt(is: &InStream, is_be: bool, comptime T: type) -> %T {
         var bytes: [@sizeOf(T)]u8 = undefined;
-        %return is.readNoEof(bytes[0...]);
+        tryreturn is.readNoEof(bytes[0...]);
         return mem.readInt(bytes, T, is_be);
     }
 
@@ -257,7 +257,7 @@ pub const InStream = struct {
         assert(size <= 8);
         var input_buf: [8]u8 = undefined;
         const input_slice = input_buf[0...size];
-        %return is.readNoEof(input_slice);
+        tryreturn is.readNoEof(input_slice);
         return mem.readInt(input_slice, T, is_be);
     }
 
@@ -337,19 +337,19 @@ pub const InStream = struct {
     }
 
     pub fn readAll(is: &InStream, buf: &Buffer) -> %void {
-        %return buf.resize(os.page_size);
+        tryreturn buf.resize(os.page_size);
 
         var actual_buf_len: usize = 0;
         while (true) {
             const dest_slice = buf.toSlice()[actual_buf_len...];
-            const bytes_read = %return is.read(dest_slice);
+            const bytes_read = tryreturn is.read(dest_slice);
             actual_buf_len += bytes_read;
 
             if (bytes_read != dest_slice.len) {
                 return buf.resize(actual_buf_len);
             }
 
-            %return buf.resize(actual_buf_len + os.page_size);
+            tryreturn buf.resize(actual_buf_len + os.page_size);
         }
     }
 
@@ -378,8 +378,8 @@ pub fn writeFile(path: []const u8, data: []const u8, allocator: ?&mem.Allocator)
     // TODO have an unbuffered File abstraction and use that here.
     // Then a buffered out stream abstraction can go on top of that for
     // use cases like stdout and stderr.
-    var out_stream = %return OutStream.open(path, allocator);
+    var out_stream = tryreturn OutStream.open(path, allocator);
     defer out_stream.close();
-    %return out_stream.write(data);
-    %return out_stream.flush();
+    tryreturn out_stream.write(data);
+    tryreturn out_stream.flush();
 }

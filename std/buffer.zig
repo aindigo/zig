@@ -10,7 +10,7 @@ pub const Buffer = struct {
 
     /// Must deinitialize with deinit.
     pub fn init(allocator: &Allocator, m: []const u8) -> %Buffer {
-        var self = %return initSize(allocator, m.len);
+        var self = tryreturn initSize(allocator, m.len);
         mem.copy(u8, self.list.items, m);
         return self;
     }
@@ -18,7 +18,7 @@ pub const Buffer = struct {
     /// Must deinitialize with deinit.
     pub fn initSize(allocator: &Allocator, size: usize) -> %Buffer {
         var self = initNull(allocator);
-        %return self.resize(size);
+        tryreturn self.resize(size);
         return self;
     }
 
@@ -51,7 +51,7 @@ pub const Buffer = struct {
     }
 
     pub fn resize(self: &Buffer, new_len: usize) -> %void {
-        %return self.list.resize(new_len + 1);
+        tryreturn self.list.resize(new_len + 1);
         self.list.items[self.len()] = 0;
     }
 
@@ -65,12 +65,12 @@ pub const Buffer = struct {
 
     pub fn append(self: &Buffer, m: []const u8) -> %void {
         const old_len = self.len();
-        %return self.resize(old_len + m.len);
+        tryreturn self.resize(old_len + m.len);
         mem.copy(u8, self.list.toSlice()[old_len...], m);
     }
 
     pub fn appendByte(self: &Buffer, byte: u8) -> %void {
-        %return self.resize(self.len() + 1);
+        tryreturn self.resize(self.len() + 1);
         self.list.items[self.len() - 1] = byte;
     }
 
@@ -91,7 +91,7 @@ pub const Buffer = struct {
     }
 
     pub fn replaceContents(self: &const Buffer, m: []const u8) -> %void {
-        %return self.resize(m.len);
+        tryreturn self.resize(m.len);
         mem.copy(u8, self.list.toSlice(), m);
     }
 };

@@ -414,15 +414,8 @@ struct AstNodeBlock {
     bool last_statement_is_result_expression;
 };
 
-enum ReturnKind {
-    ReturnKindUnconditional,
-    ReturnKindError,
-};
-
 struct AstNodeReturnExpr {
-    ReturnKind kind;
-    // might be null in case of return void;
-    AstNode *expr;
+    AstNode *expr; // might be null
 };
 
 struct AstNodeDefer {
@@ -562,6 +555,7 @@ enum PrefixOp {
     PrefixOpError,
     PrefixOpUnwrapError,
     PrefixOpUnwrapMaybe,
+    PrefixOpTryReturn,
 };
 
 struct AstNodePrefixOpExpr {

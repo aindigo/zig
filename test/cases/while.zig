@@ -48,7 +48,7 @@ fn runContinueAndBreakTest() {
 }
 
 test "returnWithImplicitCastFromWhileLoop" {
-    %%returnWithImplicitCastFromWhileLoopTest();
+    %tryreturnWithImplicitCastFromWhileLoopTest();
 }
 fn returnWithImplicitCastFromWhileLoopTest() -> %void {
     while (true) {

@@ -75,8 +75,8 @@ pub const ChildProcess = struct {
         // pid potentially wrote an error. This way we can do a blocking
         // read on the error pipe and either get @maxValue(ErrInt) (no error) or
         // an error code.
-        %return writeIntFd(self.err_pipe[1], @maxValue(ErrInt));
-        const err_int = %return readIntFd(self.err_pipe[0]);
+        tryreturn writeIntFd(self.err_pipe[1], @maxValue(ErrInt));
+        const err_int = tryreturn readIntFd(self.err_pipe[0]);
         // Here we potentially return the fork child's error
         // from the parent pid.
         if (err_int != @maxValue(ErrInt)) {
@@ -102,40 +102,40 @@ pub const ChildProcess = struct {
         stdin: StdIo, stdout: StdIo, stderr: StdIo, allocator: &Allocator) -> %ChildProcess
     {
         // TODO issue #295
-        //const stdin_pipe = if (stdin == StdIo.Pipe) %return makePipe() else undefined;
+        //const stdin_pipe = if (stdin == StdIo.Pipe) tryreturn makePipe() else undefined;
         var stdin_pipe: [2]i32 = undefined;
         if (stdin == StdIo.Pipe)
-            stdin_pipe = %return makePipe();
+            stdin_pipe = tryreturn makePipe();
         %defer if (stdin == StdIo.Pipe) { destroyPipe(stdin_pipe); };
 
         // TODO issue #295
-        //const stdout_pipe = if (stdout == StdIo.Pipe) %return makePipe() else undefined;
+        //const stdout_pipe = if (stdout == StdIo.Pipe) tryreturn makePipe() else undefined;
         var stdout_pipe: [2]i32 = undefined;
         if (stdout == StdIo.Pipe) 
-            stdout_pipe = %return makePipe();
+            stdout_pipe = tryreturn makePipe();
         %defer if (stdout == StdIo.Pipe) { destroyPipe(stdout_pipe); };
 
         // TODO issue #295
-        //const stderr_pipe = if (stderr == StdIo.Pipe) %return makePipe() else undefined;
+        //const stderr_pipe = if (stderr == StdIo.Pipe) tryreturn makePipe() else undefined;
         var stderr_pipe: [2]i32 = undefined;
         if (stderr == StdIo.Pipe) 
-            stderr_pipe = %return makePipe();
+            stderr_pipe = tryreturn makePipe();
         %defer if (stderr == StdIo.Pipe) { destroyPipe(stderr_pipe); };
 
         const any_ignore = (stdin == StdIo.Ignore or stdout == StdIo.Ignore or stderr == StdIo.Ignore);
         // TODO issue #295
         //const dev_null_fd = if (any_ignore) {
-        //    %return os.posixOpen("/dev/null", posix.O_RDWR, 0, null)
+        //    tryreturn os.posixOpen("/dev/null", posix.O_RDWR, 0, null)
         //} else {
         //    undefined
         //};
         var dev_null_fd: i32 = undefined;
         if (any_ignore)
-            dev_null_fd = %return os.posixOpen("/dev/null", posix.O_RDWR, 0, null);
+            dev_null_fd = tryreturn os.posixOpen("/dev/null", posix.O_RDWR, 0, null);
 
         // This pipe is used to communicate errors between the time of fork
         // and execve from the child process to the parent process.
-        const err_pipe = %return makePipe();
+        const err_pipe = tryreturn makePipe();
         %defer destroyPipe(err_pipe);
 
         const pid = posix.fork();
@@ -197,10 +197,10 @@ pub const ChildProcess = struct {
 
     fn setUpChildIo(stdio: StdIo, pipe_fd: i32, std_fileno: i32, dev_null_fd: i32) -> %void {
         switch (stdio) {
-            StdIo.Pipe => %return os.posixDup2(pipe_fd, std_fileno),
+            StdIo.Pipe => tryreturn os.posixDup2(pipe_fd, std_fileno),
             StdIo.Close => os.posixClose(std_fileno),
             StdIo.Inherit => {},
-            StdIo.Ignore => %return os.posixDup2(dev_null_fd, std_fileno),
+            StdIo.Ignore => tryreturn os.posixDup2(dev_null_fd, std_fileno),
         }
     }
 };

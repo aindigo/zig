@@ -11,7 +11,7 @@ pub fn main() -> %void {
         const arg = os.args.at(arg_i);
         if (mem.eql(u8, arg, "-")) {
             catted_anything = true;
-            %return cat_stream(&io.stdin);
+            tryreturn cat_stream(&io.stdin);
         } else if (arg[0] == '-') {
             return usage(exe);
         } else {
@@ -22,13 +22,13 @@ pub fn main() -> %void {
             defer is.close();
 
             catted_anything = true;
-            %return cat_stream(&is);
+            tryreturn cat_stream(&is);
         }
     }
     if (!catted_anything) {
-        %return cat_stream(&io.stdin);
+        tryreturn cat_stream(&io.stdin);
     }
-    %return io.stdout.flush();
+    tryreturn io.stdout.flush();
 }
 
 fn usage(exe: []const u8) -> %void {

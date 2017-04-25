@@ -23,7 +23,7 @@ pub const Allocator = struct {
     }
 
     fn create(self: &Allocator, comptime T: type) -> %&T {
-        &(%return self.alloc(T, 1))[0]
+        &(tryreturn self.alloc(T, 1))[0]
     }
 
     fn destroy(self: &Allocator, ptr: var) {
@@ -31,13 +31,13 @@ pub const Allocator = struct {
     }
 
     fn alloc(self: &Allocator, comptime T: type, n: usize) -> %[]T {
-        const byte_count = %return math.mulOverflow(usize, @sizeOf(T), n);
-        ([]T)(%return self.allocFn(self, byte_count))
+        const byte_count = tryreturn math.mulOverflow(usize, @sizeOf(T), n);
+        ([]T)(tryreturn self.allocFn(self, byte_count))
     }
 
     fn realloc(self: &Allocator, comptime T: type, old_mem: []T, n: usize) -> %[]T {
-        const byte_count = %return math.mulOverflow(usize, @sizeOf(T), n);
-        ([]T)(%return self.reallocFn(self, ([]u8)(old_mem), byte_count))
+        const byte_count = tryreturn math.mulOverflow(usize, @sizeOf(T), n);
+        ([]T)(tryreturn self.reallocFn(self, ([]u8)(old_mem), byte_count))
     }
 
     fn free(self: &Allocator, mem: var) {
@@ -89,7 +89,7 @@ pub const IncrementingAllocator = struct {
     }
 
     fn realloc(allocator: &Allocator, old_mem: []u8, new_size: usize) -> %[]u8 {
-        const result = %return alloc(allocator, new_size);
+        const result = tryreturn alloc(allocator, new_size);
         copy(u8, result, old_mem);
         return result;
     }
@@ -138,7 +138,7 @@ pub fn eql(comptime T: type, a: []const T, b: []const T) -> bool {
 
 /// Copies ::m to newly allocated memory. Caller is responsible to free it.
 pub fn dupe(allocator: &Allocator, comptime T: type, m: []const T) -> %[]T {
-    const new_buf = %return allocator.alloc(T, m.len);
+    const new_buf = tryreturn allocator.alloc(T, m.len);
     copy(T, new_buf, m);
     return new_buf;
 }

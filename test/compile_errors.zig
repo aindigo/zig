@@ -977,9 +977,9 @@ pub fn addCases(cases: &tests.CompileErrorContext) {
         \\export fn entry() -> usize { @sizeOf(@typeOf(f)) }
     , ".tmp_source.zig:3:19: error: expected signed integer type, found 'u32'");
 
-    cases.add("%return in function with non error return type",
+    cases.add("tryreturn in function with non error return type",
         \\export fn f() {
-        \\    %return something();
+        \\    tryreturn something();
         \\}
         \\fn something() -> %void { }
     ,
@@ -1216,7 +1216,7 @@ pub fn addCases(cases: &tests.CompileErrorContext) {
         \\pub fn testTrickyDefer() -> %void {
         \\    defer canFail() %% {};
         \\
-        \\    defer %return canFail();
+        \\    defer tryreturn canFail();
         \\
         \\    const a = maybeInt() ?? return;
         \\}

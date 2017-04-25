@@ -361,7 +361,7 @@ pub fn addCases(cases: &tests.CompareOutputContext) {
         \\    %%io.stdout.printf("before\n");
         \\    defer %%io.stdout.printf("defer1\n");
         \\    %defer %%io.stdout.printf("deferErr\n");
-        \\    %return its_gonna_fail();
+        \\    tryreturn its_gonna_fail();
         \\    defer %%io.stdout.printf("defer3\n");
         \\    %%io.stdout.printf("after\n");
         \\}
@@ -380,7 +380,7 @@ pub fn addCases(cases: &tests.CompareOutputContext) {
         \\    %%io.stdout.printf("before\n");
         \\    defer %%io.stdout.printf("defer1\n");
         \\    %defer %%io.stdout.printf("deferErr\n");
-        \\    %return its_gonna_pass();
+        \\    tryreturn its_gonna_pass();
         \\    defer %%io.stdout.printf("defer3\n");
         \\    %%io.stdout.printf("after\n");
         \\}

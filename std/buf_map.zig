@@ -29,16 +29,16 @@ pub const BufMap = struct {
 
     pub fn set(self: &BufMap, key: []const u8, value: []const u8) -> %void {
         test (self.hash_map.get(key)) |entry| {
-            const value_copy = %return self.copy(value);
+            const value_copy = tryreturn self.copy(value);
             %defer self.free(value_copy);
-            _ = %return self.hash_map.put(key, value_copy);
+            _ = tryreturn self.hash_map.put(key, value_copy);
             self.free(entry.value);
         } else {
-            const key_copy = %return self.copy(key);
+            const key_copy = tryreturn self.copy(key);
             %defer self.free(key_copy);
-            const value_copy = %return self.copy(value);
+            const value_copy = tryreturn self.copy(value);
             %defer self.free(value_copy);
-            _ = %return self.hash_map.put(key_copy, value_copy);
+            _ = tryreturn self.hash_map.put(key_copy, value_copy);
         }
     }
 
@@ -63,7 +63,7 @@ pub const BufMap = struct {
     }
 
     fn copy(self: &BufMap, value: []const u8) -> %[]const u8 {
-        const result = %return self.hash_map.allocator.alloc(u8, value.len);
+        const result = tryreturn self.hash_map.allocator.alloc(u8, value.len);
         mem.copy(u8, result, value);
         return result;
     }

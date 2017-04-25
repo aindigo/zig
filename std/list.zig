@@ -35,12 +35,12 @@ pub fn List(comptime T: type) -> type{
         }
 
         pub fn append(l: &Self, item: &const T) -> %void {
-            const new_item_ptr = %return l.addOne();
+            const new_item_ptr = tryreturn l.addOne();
             *new_item_ptr = *item;
         }
 
         pub fn resize(l: &Self, new_len: usize) -> %void {
-            %return l.ensureCapacity(new_len);
+            tryreturn l.ensureCapacity(new_len);
             l.len = new_len;
         }
 
@@ -56,12 +56,12 @@ pub fn List(comptime T: type) -> type{
                 better_capacity += better_capacity / 2 + 8;
                 if (better_capacity >= new_capacity) break;
             }
-            l.items = %return l.allocator.realloc(T, l.items, better_capacity);
+            l.items = tryreturn l.allocator.realloc(T, l.items, better_capacity);
         }
 
         pub fn addOne(l: &Self) -> %&T {
             const new_length = l.len + 1;
-            %return l.ensureCapacity(new_length);
+            tryreturn l.ensureCapacity(new_length);
             const result = &l.items[l.len];
             l.len = new_length;
             return result;

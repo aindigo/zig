@@ -247,13 +247,13 @@ pub const Builder = struct {
             %%wanted_steps.append(&self.default_step);
         } else {
             for (step_names) |step_name| {
-                const s = %return self.getTopLevelStepByName(step_name);
+                const s = tryreturn self.getTopLevelStepByName(step_name);
                 %%wanted_steps.append(s);
             }
         }
 
         for (wanted_steps.toSliceConst()) |s| {
-            %return self.makeOneStep(s);
+            tryreturn self.makeOneStep(s);
         }
     }
 
@@ -295,7 +295,7 @@ pub const Builder = struct {
 
         s.loop_flag = false;
 
-        %return s.make();
+        tryreturn s.make();
     }
 
     fn getTopLevelStepByName(self: &Builder, name: []const u8) -> %&Step {
@@ -1486,7 +1486,7 @@ pub const CLibrary = struct {
                 %%cc_args.append(dir);
             }
 
-            %return builder.spawnChild(cc, cc_args.toSliceConst());
+            tryreturn builder.spawnChild(cc, cc_args.toSliceConst());
 
             %%self.object_files.append(o_file);
         }
@@ -1510,7 +1510,7 @@ pub const CLibrary = struct {
                 %%cc_args.append(builder.pathFromRoot(object_file));
             }
 
-            %return builder.spawnChild(cc, cc_args.toSliceConst());
+            tryreturn builder.spawnChild(cc, cc_args.toSliceConst());
 
             // sym link for libfoo.so.1 to libfoo.so.1.2.3
             %%os.atomicSymLink(builder.allocator, self.out_filename, self.major_only_filename);
@@ -1641,7 +1641,7 @@ pub const CExecutable = struct {
                 %%cc_args.append(builder.pathFromRoot(dir));
             }
 
-            %return builder.spawnChild(cc, cc_args.toSliceConst());
+            tryreturn builder.spawnChild(cc, cc_args.toSliceConst());
 
             %%self.object_files.append(o_file);
         }
@@ -1665,7 +1665,7 @@ pub const CExecutable = struct {
             %%cc_args.append(full_path_lib);
         }
 
-        %return builder.spawnChild(cc, cc_args.toSliceConst());
+        tryreturn builder.spawnChild(cc, cc_args.toSliceConst());
     }
 
     pub fn setTarget(self: &CExecutable, target_arch: Arch, target_os: Os, target_environ: Environ) {
@@ -1863,7 +1863,7 @@ pub const Step = struct {
         if (self.done_flag)
             return;
 
-        %return self.makeFn(self);
+        tryreturn self.makeFn(self);
         self.done_flag = true;
     }
 

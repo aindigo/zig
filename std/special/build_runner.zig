@@ -85,7 +85,7 @@ pub fn main() -> %void {
     if (builder.validateUserInputDidItFail())
         return usage(&builder, true, &io.stderr);
 
-    %return builder.make(targets.toSliceConst());
+    tryreturn builder.make(targets.toSliceConst());
 }
 
 fn usage(builder: &Builder, already_ran_build: bool, out_stream: &io.OutStream) -> %void {

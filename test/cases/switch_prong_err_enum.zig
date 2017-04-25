@@ -16,7 +16,7 @@ const FormValue = enum {
 
 fn doThing(form_id: u64) -> %FormValue {
     return switch (form_id) {
-        17 => FormValue.Address { %return readOnce() },
+        17 => FormValue.Address { tryreturn readOnce() },
         else => error.InvalidDebugInfo,
     }
 }

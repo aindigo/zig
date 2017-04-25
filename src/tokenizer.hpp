@@ -76,6 +76,7 @@ enum TokenId {
     TokenIdKeywordThis,
     TokenIdKeywordTrue,
     TokenIdKeywordTry,
+    TokenIdKeywordTryReturn,
     TokenIdKeywordUndefined,
     TokenIdKeywordUnion,
     TokenIdKeywordUnreachable,
