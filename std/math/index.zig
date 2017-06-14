@@ -1,4 +1,4 @@
-const assert = @import("debug.zig").assert;
+const assert = @import("../debug.zig").assert;
 const builtin = @import("builtin");
 
 pub const frexp = @import("frexp.zig").frexp;
@@ -384,6 +384,6 @@ test "math" {
 
 
 pub fn approxEq(comptime T: type, x: T, y: T, epsilon: T) -> bool {
-    comptime assert(@typeId(T) == TypeId.Float);
-    fabs(x - y) < epsilon
+    comptime assert(@typeId(T) == builtin.TypeId.Float);
+    absFloat(x - y) < epsilon
 }

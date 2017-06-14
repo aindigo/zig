@@ -1206,6 +1206,7 @@ enum BuiltinFnId {
     BuiltinFnIdSetGlobalLinkage,
     BuiltinFnIdPanic,
     BuiltinFnIdPtrCast,
+    BuiltinFnIdBitCast,
     BuiltinFnIdIntToPtr,
     BuiltinFnIdEnumTagName,
     BuiltinFnIdFieldParentPtr,
@@ -1781,6 +1782,7 @@ enum IrInstructionId {
     IrInstructionIdTestComptime,
     IrInstructionIdInitEnum,
     IrInstructionIdPtrCast,
+    IrInstructionIdBitCast,
     IrInstructionIdWidenOrShorten,
     IrInstructionIdIntToPtr,
     IrInstructionIdPtrToInt,
@@ -2427,6 +2429,13 @@ struct IrInstructionPtrCast {
 
     IrInstruction *dest_type;
     IrInstruction *ptr;
+};
+
+struct IrInstructionBitCast {
+    IrInstruction base;
+
+    IrInstruction *dest_type;
+    IrInstruction *value;
 };
 
 struct IrInstructionWidenOrShorten {

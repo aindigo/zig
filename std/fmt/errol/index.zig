@@ -1,7 +1,10 @@
 const enum3 = @import("enum3.zig").enum3;
 const enum3_data = @import("enum3.zig").enum3_data;
 const lookup_table = @import("lookup.zig").lookup_table;
+const HP = @import("lookup.zig").HP;
 const math = @import("../../math/index.zig");
+const mem = @import("../../mem.zig");
+const assert = @import("../../debug.zig").assert;
 
 pub const FloatDecimal = struct {
     digits: []u8,
@@ -12,7 +15,7 @@ const u128 = @IntType(false, 128);
 
 /// Corrected Errol3 double to ASCII conversion.
 pub fn errol3(value: f64, buffer: []u8) -> FloatDecimal {
-    const bits = @bitCast(u64, value64);
+    const bits = @bitCast(u64, value);
     const i = tableLowerBound(bits);
     if (i < enum3.len and enum3[i] == bits) {
         const data = enum3_data[i];
@@ -28,36 +31,34 @@ pub fn errol3(value: f64, buffer: []u8) -> FloatDecimal {
 }
 
 /// Uncorrected Errol3 double to ASCII conversion.
-fn errol3u(value: f64, buffer: []u8) -> FloatDecimal {
+fn errol3u(val: f64, buffer: []u8) -> FloatDecimal {
     // check if in integer or fixed range
 
     if (val >= 9.007199254740992e15 and val < 3.40282366920938e+38) {
-        return errolInt(value, buffer);
+        return errolInt(val, buffer);
     } else if (val >= 16.0 and val < 9.007199254740992e15) {
-        return errolFixed(value, buffer);
+        return errolFixed(val, buffer);
     }
 
     
-    const ten = 1.0;
-    var exp: i16 = 1;
-
     // normalize the midpoint
 
     var e: i32 = undefined;
-    math.frexp(val, &e);
-    exp = 307 + f64(e) * 0.30103;
+    _ = math.frexp(val, &e);
+    var exp = i16(math.floor(307 + f64(e) * 0.30103));
     if (exp < 20) {
         exp = 20;
-    } else if (exp >= lookup_table.len) {
-        exp = lookup_table.len - 1;
+    } else if (usize(exp) >= lookup_table.len) {
+        exp = i16(lookup_table.len - 1);
     }
 
-    var mid = lookup_table[exp];
+    var mid = lookup_table[usize(exp)];
     mid = hpProd(mid, val);
-    const lten = lookup_table[exp].val;
-    const ten = 1.0;
+    const lten = lookup_table[usize(exp)].val;
 
     exp -= 307;
+
+    var ten: f64 = 1.0;
 
     while (mid.val > 10.0 or (mid.val == 10.0 and mid.off >= 0.0)) {
         exp += 1;
@@ -72,11 +73,14 @@ fn errol3u(value: f64, buffer: []u8) -> FloatDecimal {
     }
 
     // compute boundaries
-
-    high.val = mid.val;
-    high.off = mid.off + (fpnext(val) - val) * lten * ten / 2.0;
-    low.val = mid.val;
-    low.off = mid.off + (fpprev(val) - val) * lten * ten / 2.0;
+    var high = HP {
+        .val = mid.val,
+        .off = mid.off + (fpnext(val) - val) * lten * ten / 2.0,
+    };
+    var low = HP {
+        .val = mid.val,
+        .off = mid.off + (fpprev(val) - val) * lten * ten / 2.0,
+    };
 
     hpNormalize(&high);
     hpNormalize(&low);
@@ -98,12 +102,12 @@ fn errol3u(value: f64, buffer: []u8) -> FloatDecimal {
     // digit generation
     var buf_index: usize = 0;
     while (true) {
-        var hdig = u8(high.val);
-        if ((high.val == hdig) and (high.off < 0))
+        var hdig = u8(math.floor(high.val));
+        if ((high.val == f64(hdig)) and (high.off < 0))
             hdig -= 1;
 
-        var ldig = u8(low.val);
-        if ((low.val == ldig) and (low.off < 0))
+        var ldig = u8(math.floor(low.val));
+        if ((low.val == f64(ldig)) and (low.off < 0))
             ldig -= 1;
 
         if (ldig != hdig)
@@ -111,15 +115,15 @@ fn errol3u(value: f64, buffer: []u8) -> FloatDecimal {
 
         buffer[buf_index] = hdig + '0';
         buf_index += 1;
-        high.val -= hdig;
-        low.val -= ldig;
+        high.val -= f64(hdig);
+        low.val -= f64(ldig);
         hpMul10(&high);
         hpMul10(&low);
     }
 
     const tmp = (high.val + low.val) / 2.0;
-    var mdig = u8(tmp + 0.5);
-    if ((mdig - tmp) == 0.5 and (mdig & 0x1))
+    var mdig = u8(math.floor(tmp + 0.5));
+    if ((f64(mdig) - tmp) == 0.5 and (mdig & 0x1) != 0)
         mdig -= 1;
 
     buffer[buf_index] = mdig + '0';
@@ -231,7 +235,7 @@ fn hpMul10(hp: &HP) {
 ///  @val: The val.
 ///  @buf: The output buffer.
 ///  &return: The exponent.
-fn errolInt(value: f64, buffer: []u8) -> FloatDecimal {
+fn errolInt(val: f64, buffer: []u8) -> FloatDecimal {
     const pow19 = 1e19;
 
     assert((val >= 9.007199254740992e15) and val < (3.40282366920938e38));
@@ -240,7 +244,7 @@ fn errolInt(value: f64, buffer: []u8) -> FloatDecimal {
     var low: u128 = mid - fpeint((fpnext(val) - val) / 2.0);
     var high: u128 = mid + fpeint((val - fpprev(val)) / 2.0);
 
-    if (@bitCast(u64, value) & 0x1 != 0) { 
+    if (@bitCast(u64, val) & 0x1 != 0) { 
         high -= 1;
     } else {
         low -= 1;
@@ -302,7 +306,7 @@ fn errolFixed(val: f64, buffer: []u8) -> FloatDecimal {
     var buf_index = u64toa(u, buffer);
     var exp: i32 = buf_index;
     var j: i32 = exp;
-    buf[j] = 0;
+    buffer[j] = 0;
 
     if (mid != 0.0) {
         while (mid != 0.0) {
@@ -318,7 +322,7 @@ fn errolFixed(val: f64, buffer: []u8) -> FloatDecimal {
             var hdig = i32(hi);
             hi -= hdig;
 
-            buf[j] = mdig + '0';
+            buffer[j] = mdig + '0';
             j += 1;
 
             if(hdig != ldig or j > 50)
@@ -326,20 +330,23 @@ fn errolFixed(val: f64, buffer: []u8) -> FloatDecimal {
         }
 
         if (mid > 0.5) {
-            buf[j-1] += 1;
-        } else if ((mid == 0.5) and (buf[j-1] & 0x1)) {
-            buf[j-1] += 1;
+            buffer[j-1] += 1;
+        } else if ((mid == 0.5) and (buffer[j-1] & 0x1)) {
+            buffer[j-1] += 1;
         }
     } else {
-        while (buf[j-1] == '0') {
-            buf[j-1] = 0;
+        while (buffer[j-1] == '0') {
+            buffer[j-1] = 0;
             j -= 1;
         }
     }
 
-    buf[j] = 0;
+    buffer[j] = 0;
 
-    return exp;
+    return FloatDecimal {
+        .digits = buffer[0..j],
+        .exp = exp,
+    };
 }
 
 fn fpnext(val: f64) -> f64 {

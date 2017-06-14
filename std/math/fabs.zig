@@ -1,3 +1,5 @@
+const assert = @import("../debug.zig").assert;
+
 pub fn fabs(x: var) -> @typeOf(x) {
     const T = @typeOf(x);
     switch (T) {
@@ -20,28 +22,28 @@ fn fabs64(x: f64) -> f64 {
 }
 
 test "fabs" {
-    fmath.assert(fabs(f32(1.0)) == fabs32(1.0));
-    fmath.assert(fabs(f64(1.0)) == fabs64(1.0));
+    assert(fabs(f32(1.0)) == fabs32(1.0));
+    assert(fabs(f64(1.0)) == fabs64(1.0));
     comptime {
-        fmath.assert(fabs(f32(1.0)) == fabs32(1.0));
-        fmath.assert(fabs(f64(1.0)) == fabs64(1.0));
+        assert(fabs(f32(1.0)) == fabs32(1.0));
+        assert(fabs(f64(1.0)) == fabs64(1.0));
     }
 }
 
 test "fabs32" {
-    fmath.assert(fabs64(1.0) == 1.0);
-    fmath.assert(fabs64(-1.0) == 1.0);
+    assert(fabs64(1.0) == 1.0);
+    assert(fabs64(-1.0) == 1.0);
     comptime {
-        fmath.assert(fabs64(1.0) == 1.0);
-        fmath.assert(fabs64(-1.0) == 1.0);
+        assert(fabs64(1.0) == 1.0);
+        assert(fabs64(-1.0) == 1.0);
     }
 }
 
 test "fabs64" {
-    fmath.assert(fabs64(1.0) == 1.0);
-    fmath.assert(fabs64(-1.0) == 1.0);
+    assert(fabs64(1.0) == 1.0);
+    assert(fabs64(-1.0) == 1.0);
     comptime {
-        fmath.assert(fabs64(1.0) == 1.0);
-        fmath.assert(fabs64(-1.0) == 1.0);
+        assert(fabs64(1.0) == 1.0);
+        assert(fabs64(-1.0) == 1.0);
     }
 }
