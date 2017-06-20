@@ -341,7 +341,6 @@ static TypeTableEntry *resolve_type_with_table(Context *c, const Type *ty, const
                     case BuiltinType::OCLEvent:
                     case BuiltinType::OCLClkEvent:
                     case BuiltinType::OCLQueue:
-                    case BuiltinType::OCLNDRange:
                     case BuiltinType::OCLReserveID:
                         emit_warning(c, decl, "missed a builtin type");
                         return c->codegen->builtin_types.entry_invalid;
@@ -586,6 +585,7 @@ static TypeTableEntry *resolve_type_with_table(Context *c, const Type *ty, const
         case Type::Atomic:
         case Type::Pipe:
         case Type::ObjCTypeParam:
+        case Type::DeducedTemplateSpecialization:
             emit_warning(c, decl, "missed a '%s' type", ty->getTypeClassName());
             return c->codegen->builtin_types.entry_invalid;
     }
