@@ -294,6 +294,8 @@ install(FILES "${CMAKE_SOURCE_DIR}/std/math/trunc.zig" DESTINATION "${ZIG_STD_DE
 install(FILES "${CMAKE_SOURCE_DIR}/std/mem.zig" DESTINATION "${ZIG_STD_DEST}")
 install(FILES "${CMAKE_SOURCE_DIR}/std/net.zig" DESTINATION "${ZIG_STD_DEST}")
 install(FILES "${CMAKE_SOURCE_DIR}/std/os/child_process.zig" DESTINATION "${ZIG_STD_DEST}/os")
+install(FILES "${CMAKE_SOURCE_DIR}/std/os/freebsd.zig" DESTINATION "${ZIG_STD_DEST}/os")
+install(FILES "${CMAKE_SOURCE_DIR}/std/os/freebsd_x86_64.zig" DESTINATION "${ZIG_STD_DEST}/os")
 install(FILES "${CMAKE_SOURCE_DIR}/std/os/darwin.zig" DESTINATION "${ZIG_STD_DEST}/os")
 install(FILES "${CMAKE_SOURCE_DIR}/std/os/darwin_x86_64.zig" DESTINATION "${ZIG_STD_DEST}/os")
 install(FILES "${CMAKE_SOURCE_DIR}/std/os/errno.zig" DESTINATION "${ZIG_STD_DEST}/os")

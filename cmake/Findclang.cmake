@@ -8,6 +8,7 @@
 
 find_path(CLANG_INCLUDE_DIRS NAMES clang/Frontend/ASTUnit.h
     PATHS
+    	/usr/local/llvm40/include
         /usr/lib/llvm-4.0/include
         /mingw64/include)
 
@@ -16,6 +17,7 @@ find_path(CLANG_INCLUDE_DIRS NAMES clang/Frontend/ASTUnit.h
     find_library(CLANG_${_prettylibname_}_LIB NAMES ${_libname_}
         PATHS
             /usr/lib/llvm-4.0/lib
+	    /usr/local/llvm40/lib
             /mingw64/lib
             /c/msys64/mingw64/lib
             c:\\msys64\\mingw64\\lib)
