@@ -2,10 +2,12 @@ const builtin = @import("builtin");
 const Os = builtin.Os;
 pub const windows = @import("windows/index.zig");
 pub const darwin = @import("darwin.zig");
+pub const freebsd = @import("freebsd.zig");
 pub const linux = @import("linux.zig");
 pub const posix = switch(builtin.os) {
     Os.linux => linux,
     Os.darwin, Os.macosx, Os.ios => darwin,
+    Os.freebsd => freebsd,
     else => @compileError("Unsupported OS"),
 };
 

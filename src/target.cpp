@@ -131,6 +131,7 @@ static const ZigLLVM_OSType os_list[] = {
 };
 
 static const ZigLLVM_EnvironmentType environ_list[] = {
+    ZigLLVM_UnknownEnvironment,
     ZigLLVM_GNU,
     ZigLLVM_GNUABI64,
     ZigLLVM_GNUEABI,
@@ -464,6 +465,7 @@ uint32_t target_c_type_size_in_bits(const ZigTarget *target, CIntType id) {
             }
         case ZigLLVM_Linux:
         case ZigLLVM_Darwin:
+        case ZigLLVM_FreeBSD:
             switch (id) {
                 case CIntTypeShort:
                 case CIntTypeUShort:
@@ -498,7 +500,6 @@ uint32_t target_c_type_size_in_bits(const ZigTarget *target, CIntType id) {
             }
         case ZigLLVM_CloudABI:
         case ZigLLVM_DragonFly:
-        case ZigLLVM_FreeBSD:
         case ZigLLVM_IOS:
         case ZigLLVM_KFreeBSD:
         case ZigLLVM_Lv2:

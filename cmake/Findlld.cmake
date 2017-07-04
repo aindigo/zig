@@ -9,9 +9,10 @@
 find_path(LLD_INCLUDE_DIRS NAMES lld/Driver/Driver.h
     PATHS
         /usr/lib/llvm-4.0/include
+	/usr/local/llv40/include
         /mingw64/include)
 
-find_library(LLD_LIBRARY NAMES lld-4.0 lld PATHS /usr/lib/llvm-4.0/lib)
+find_library(LLD_LIBRARY NAMES lld-4.0 lld PATHS /usr/lib/llvm-4.0/lib /usr/local/llvm40/lib)
 if(EXISTS ${LLD_LIBRARY})
     set(LLD_LIBRARIES ${LLD_LIBRARY})
 else()
@@ -22,6 +23,7 @@ else()
                 /usr/lib/llvm-4.0/lib
                 /mingw64/lib
                 /c/msys64/mingw64/lib
+		/usr/local/llvm40/lib
                 c:/msys64/mingw64/lib)
             if(LLD_${_prettylibname_}_LIB)
                 set(LLD_LIBRARIES ${LLD_LIBRARIES} ${LLD_${_prettylibname_}_LIB})
