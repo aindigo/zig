@@ -5,68 +5,75 @@
  * See http://opensource.org/licenses/MIT
  */
 
-
-#include <stdint.h>
+#include "bigfloat.hpp"
+#include "bigint.hpp"
+#include "buffer.hpp"
 #include "list.hpp"
 
-struct Buf;
-
-struct BigInt {
-    // Least significant digit first
-    ZigList<uint64_t> digits;
-    bool is_negative;
-};
-
-enum Cmp {
-    CmpLT,
-    CmpGT,
-    CmpEQ,
-};
-
 static void bigint_normalize(BigInt *dest) {
+    const uint64_t *digits = bigint_ptr(dest);
+
     size_t last_nonzero_digit = SIZE_MAX;
-    for (size_t i = 0; i < dest->digits.length; i += 1) {
-        uint64_t digit = dest->digits.at(i);
+    for (size_t i = 0; i < dest->digit_count; i += 1) {
+        uint64_t digit = digits[i];
         if (digit != 0) {
             last_nonzero_digit = i;
         }
     }
     if (last_nonzero_digit == SIZE_MAX) {
         dest->is_negative = false;
-        dest->digits.resize(0);
+        dest->digit_count = 0;
     } else {
-        dest->digits.resize(last_nonzero_digit + 1);
+        dest->digit_count = last_nonzero_digit + 1;
+        if (last_nonzero_digit == 0) {
+            dest->data.digit = digits[0];
+        }
     }
 }
 
 static uint8_t digit_to_char(uint8_t digit, bool uppercase) {
-    if (digit >= 0 && digit <= 9) {
+    if (digit <= 9) {
         return digit + '0';
-    } else if (digit >= 10 && digit <= 35) {
+    } else if (digit <= 35) {
         return digit + (uppercase ? 'A' : 'a');
     } else {
         zig_unreachable();
     }
 }
 
-static void to_twos_complement(BigInt *dest, BigInt *src, size_t bit_count) {
+size_t bigint_bits_needed(const BigInt *op) {
+    size_t full_bits = op->digit_count * 64;
+    size_t leading_zero_count = bigint_clz(op, full_bits);
+    size_t bits_needed = full_bits - leading_zero_count;
+    return bits_needed + op->is_negative;
+}
+
+static void to_twos_complement(BigInt *dest, const BigInt *src, size_t bit_count) {
     if (src->is_negative) {
         BigInt negated = {0};
         bigint_negate(&negated, src);
 
         BigInt inverted = {0};
-        bigint_not(&inverted, &negated, bit_count);
+        bigint_not(&inverted, &negated, bit_count, false);
 
         BigInt one = {0};
         bigint_init_unsigned(&one, 1);
 
-        bigint_add(dest, &inverted, one);
+        bigint_add(dest, &inverted, &one);
     } else {
         bigint_init_bigint(dest, src);
     }
 }
 
-static void from_twos_complement(BigInt *dest, BigInt *src, size_t bit_count) {
+static bool bit_at_index(const BigInt *bi, size_t index) {
+    size_t digit_index = bi->digit_count - (index / 64) - 1;
+    size_t digit_bit_index = index % 64;
+    const uint64_t *digits = bigint_ptr(bi);
+    uint64_t digit = digits[digit_index];
+    return ((digit >> digit_bit_index) & 0x1) == 0x1;
+}
+
+static void from_twos_complement(BigInt *dest, const BigInt *src, size_t bit_count) {
     assert(!src->is_negative);
 
     if (bit_count == 0) {
@@ -79,10 +86,10 @@ static void from_twos_complement(BigInt *dest, BigInt *src, size_t bit_count) {
         bigint_init_signed(&negative_one, -1);
 
         BigInt minus_one = {0};
-        bigint_add(minus_one, &src, negative_one);
+        bigint_add(&minus_one, src, &negative_one);
 
         BigInt inverted = {0};
-        bigint_not(inverted, &minus_one, bit_count);
+        bigint_not(&inverted, &minus_one, bit_count, false);
 
         bigint_negate(dest, &inverted);
     } else {
@@ -90,18 +97,14 @@ static void from_twos_complement(BigInt *dest, BigInt *src, size_t bit_count) {
     }
 }
 
-static bool bit_at_index(BigInt *bi, size_t index) {
-    size_t digit_index = bi->digits.length - (index / 64) - 1;
-    size_t digit_bit_index = index % 64;
-    uint64_t digit = bi->digits.at(digit_index);
-    return ((digit >> digit_bit_index) & 0x1) == 0x1;
-}
-
 void bigint_init_unsigned(BigInt *dest, uint64_t x) {
-    dest->digits.resize(1);
-    dest->digits.at(0) = x;
+    if (x == 0) {
+        dest->digit_count = 0;
+        return;
+    }
+    dest->digit_count = 1;
+    dest->data.digit = x;
     dest->is_negative = false;
-    bigint_normalize(dest);
 }
 
 void bigint_init_signed(BigInt *dest, int64_t x) {
@@ -109,28 +112,88 @@ void bigint_init_signed(BigInt *dest, int64_t x) {
         return bigint_init_unsigned(dest, x);
     }
     dest->is_negative = true;
-    dest->digits.resize(1);
-    dest->digits.at(0) = ((uint64_t)(-(x + 1))) + 1;
+    dest->digit_count = 1;
+    dest->data.digit = ((uint64_t)(-(x + 1))) + 1;
+}
+
+void bigint_init_bigint(BigInt *dest, const BigInt *src) {
+    if (src->digit_count == 0) {
+        return bigint_init_unsigned(dest, 0);
+    } else if (src->digit_count == 1) {
+        dest->digit_count = 1;
+        dest->data.digit = src->data.digit;
+        dest->is_negative = src->is_negative;
+        return;
+    }
+    dest->is_negative = src->is_negative;
+    dest->digit_count = src->digit_count;
+    dest->data.digits = allocate_nonzero<uint64_t>(dest->digit_count);
+    memcpy(dest->data.digits, src->data.digits, sizeof(uint64_t) * dest->digit_count);
+}
+
+void bigint_init_bigfloat(BigInt *dest, const BigFloat *op) {
+    BREAKPOINT;
+    BigFloat zero = {0};
+    bigfloat_init_float(&zero, 0.0);
+    Cmp zcmp = bigfloat_cmp(op, &zero);
+    if (zcmp == CmpEQ) {
+        bigint_init_unsigned(dest, 0);
+        return;
+    }
+    ZigList<uint64_t> digit_list = {0};
+    digit_list.resize(0);
+
+    BigFloat tmp_float1 = {0};
+    if (zcmp == CmpLT) {
+        bigfloat_negate(&tmp_float1, op);
+    } else {
+        bigfloat_init_bigfloat(&tmp_float1, op);
+    }
+
+    BigFloat tmp_float2 = {0};
+
+    BigFloat *cur = &tmp_float1;
+    BigFloat *other = &tmp_float2;
+
+    BigFloat base_float = {0};
+    bigfloat_init_float(&base_float, UINT64_MAX);
+
+    BigFloat one_float = {0};
+    bigfloat_init_float(&one_float, 1.0);
+
+    while (true) {
+        BigFloat float_digit = {0};
+        bigfloat_rem(&float_digit, cur, &base_float);
+
+        uint64_t int_digit = float_digit.value;
+        digit_list.append(int_digit);
+
+        bigfloat_div(other, cur, &base_float);
+        if (bigfloat_cmp(other, &one_float) == CmpLT)
+            break;
+
+        BigFloat *tmp_ptr = other;
+        other = cur;
+        cur = tmp_ptr;
+    }
+
+    dest->is_negative = (zcmp == CmpLT);
+    dest->data.digits = digit_list.items;
+    dest->digit_count = digit_list.length;
     bigint_normalize(dest);
 }
 
-void bigint_init_bigint(BigInt *dest, BigInt *src) {
-    dest->digits.resize(src->digits.length);
-    for (size_t i = 0; i < src->digits.length; i += 1) {
-        dest->digits.at(i) = src->digits.at(i);
-    }
-    dest->is_negative = src->is_negative;
-}
-
-bool bigint_fits_in_bits(BigInt *bn, size_t bit_count, bool is_signed) {
+bool bigint_fits_in_bits(const BigInt *bn, size_t bit_count, bool is_signed) {
+    assert(bn->digit_count != 1 || bn->data.digit != 0);
     if (bit_count == 0) {
-        BigInt zero = {0};
-        bigint_init_unsigned(&zero, 0);
-        return bigint_cmp(bn, zero) == CmpEQ;
+        return bigint_cmp_zero(bn) == CmpEQ;
+    }
+    if (bn->digit_count == 0) {
+        return true;
     }
 
     if (!is_signed) {
-        size_t full_bits = bn->digits.length * 64;
+        size_t full_bits = bn->digit_count * 64;
         size_t leading_zero_count = bigint_clz(bn, full_bits);
         return bit_count >= full_bits - leading_zero_count;
     }
@@ -156,12 +219,15 @@ bool bigint_fits_in_bits(BigInt *bn, size_t bit_count, bool is_signed) {
     return (min_cmp == CmpGT || min_cmp == CmpEQ) && (max_cmp == CmpLT || max_cmp == CmpEQ);
 }
 
-void bigint_write_twos_complement(BigInt *big_int, uint8_t *buf, bool is_big_endian, size_t bit_count) {
+void bigint_write_twos_complement(const BigInt *big_int, uint8_t *buf, size_t bit_count, bool is_big_endian) {
+    BREAKPOINT;
     if (bit_count == 0)
         return;
 
     BigInt twos_comp = {0};
     to_twos_complement(&twos_comp, big_int, bit_count);
+
+    const uint64_t *twos_comp_digits = bigint_ptr(&twos_comp);
 
     size_t bits_in_last_digit = bit_count % 64;
     size_t bytes_in_last_digit = (bits_in_last_digit + 7) / 8;
@@ -172,7 +238,7 @@ void bigint_write_twos_complement(BigInt *big_int, uint8_t *buf, bool is_big_end
         size_t digit_index = last_digit_index;
         size_t buf_index = 0;
         for (;;) {
-            uint64_t x = (digit_index < twos_comp.digits.length) ? twos_comp.digits.items[digit_index] : 0;
+            uint64_t x = (digit_index < twos_comp.digit_count) ? twos_comp_digits[digit_index] : 0;
 
             for (size_t byte_index = 7;;) {
                 uint8_t byte = x & 0xff;
@@ -191,7 +257,7 @@ void bigint_write_twos_complement(BigInt *big_int, uint8_t *buf, bool is_big_end
             if (digit_index == 0) break;
             digit_index -= 1;
             if (digit_index == last_digit_index) {
-                buf_index += bytes_in_last_digit
+                buf_index += bytes_in_last_digit;
             } else {
                 buf_index += 8;
             }
@@ -200,7 +266,7 @@ void bigint_write_twos_complement(BigInt *big_int, uint8_t *buf, bool is_big_end
         size_t digit_count = (bit_count + 63) / 64;
         size_t buf_index = 0;
         for (size_t digit_index = 0; digit_index < digit_count; digit_index += 1) {
-            uint64_t x = (digit_index < twos_comp.digits.length) ? twos_comp.digits.items[digit_index] : 0;
+            uint64_t x = (digit_index < twos_comp.digit_count) ? twos_comp_digits[digit_index] : 0;
 
             for (size_t byte_index = 0; byte_index < 8; byte_index += 1) {
                 uint8_t byte = x & 0xff;
@@ -219,25 +285,50 @@ void bigint_write_twos_complement(BigInt *big_int, uint8_t *buf, bool is_big_end
 void bigint_read_twos_complement(BigInt *dest, const uint8_t *buf, size_t bit_count, bool is_big_endian,
         bool is_signed)
 {
+    BREAKPOINT;
     if (bit_count == 0) {
         bigint_init_unsigned(dest, 0);
         return;
     }
 
-    size_t digit_count = (bit_count + 63) / 64;
-    dest->digits.resize(digit_count);
+    dest->digit_count = (bit_count + 63) / 64;
+    uint64_t *digits;
+    if (dest->digit_count == 1) {
+        digits = &dest->data.digit;
+    } else {
+        digits = allocate_nonzero<uint64_t>(dest->digit_count);
+        dest->data.digits = digits;
+    }
 
     size_t bits_in_last_digit = bit_count % 64;
     size_t bytes_in_last_digit = (bits_in_last_digit + 7) / 8;
     size_t unread_byte_count = 8 - bytes_in_last_digit;
 
     if (is_big_endian) {
-        aoeu
+        size_t buf_index = 0;
+        uint64_t digit = 0;
+        for (size_t byte_index = unread_byte_count; byte_index < 8; byte_index += 1) {
+            uint8_t byte = buf[buf_index];
+            buf_index += 1;
+            digit <<= 8;
+            digit |= byte;
+        }
+        digits[dest->digit_count - 1] = digit;
+        for (size_t digit_index = 1; digit_index < dest->digit_count; digit_index += 1) {
+            digit = 0;
+            for (size_t byte_index = 0; byte_index < 8; byte_index += 1) {
+                uint8_t byte = buf[buf_index];
+                buf_index += 1;
+                digit <<= 8;
+                digit |= byte;
+            }
+            digits[dest->digit_count - 1 - digit_index] = digit;
+        }
     } else {
         size_t buf_index = 0;
-        for (size_t digit_index = 0; digit_index < digit_count; digit_index += 1) {
+        for (size_t digit_index = 0; digit_index < dest->digit_count; digit_index += 1) {
             uint64_t digit = 0;
-            size_t end_byte_index = (digit_index == digit_count - 1) ? bytes_in_last_digit : 8;
+            size_t end_byte_index = (digit_index == dest->digit_count - 1) ? bytes_in_last_digit : 8;
             for (size_t byte_index = 0; byte_index < end_byte_index; byte_index += 1) {
                 uint8_t byte = buf[buf_index];
                 buf_index += 1;
@@ -245,7 +336,7 @@ void bigint_read_twos_complement(BigInt *dest, const uint8_t *buf, size_t bit_co
                 digit <<= 8;
                 digit |= byte;
             }
-            dest->digits.items[digit_index] = digit;
+            digits[digit_index] = digit;
         }
     }
 
@@ -260,45 +351,77 @@ void bigint_read_twos_complement(BigInt *dest, const uint8_t *buf, size_t bit_co
     }
 }
 
-void bigint_add(BigInt *dest, BigInt *op1, BigInt *op2) {
+static bool add_u64_overflow(uint64_t op1, uint64_t op2, uint64_t *result) {
+    return __builtin_uaddll_overflow((unsigned long long)op1, (unsigned long long)op2,
+            (unsigned long long *)result);
+}
+
+static bool sub_u64_overflow(uint64_t op1, uint64_t op2, uint64_t *result) {
+    return __builtin_usubll_overflow((unsigned long long)op1, (unsigned long long)op2,
+            (unsigned long long *)result);
+}
+
+static bool mul_u64_overflow(uint64_t op1, uint64_t op2, uint64_t *result) {
+    return __builtin_umulll_overflow((unsigned long long)op1, (unsigned long long)op2,
+            (unsigned long long *)result);
+}
+
+void bigint_add(BigInt *dest, const BigInt *op1, const BigInt *op2) {
+    if (op1->digit_count == 0) {
+        return bigint_init_bigint(dest, op2);
+    }
+    if (op2->digit_count == 0) {
+        return bigint_init_bigint(dest, op1);
+    }
     if (op1->is_negative == op2->is_negative) {
         dest->is_negative = op1->is_negative;
-        dest->digits.resize(0);
 
-        uint64_t overflow = 0;
-        for (size_t i = 0;; i += 1) {
+        const uint64_t *op1_digits = bigint_ptr(op1);
+        const uint64_t *op2_digits = bigint_ptr(op2);
+        uint64_t overflow = add_u64_overflow(op1_digits[0], op2_digits[0], &dest->data.digit);
+        if (overflow == 0 && op1->digit_count == 1 && op2->digit_count == 1) {
+            dest->digit_count = 1;
+            bigint_normalize(dest);
+            return;
+        }
+        BREAKPOINT;
+        size_t i = 1;
+        uint64_t first_digit = dest->data.digit;
+        dest->data.digits = allocate_nonzero<uint64_t>(max(op1->digit_count, op2->digit_count) + 1);
+        dest->data.digits[0] = first_digit;
+
+        for (;;) {
             bool found_digit = false;
             uint64_t x = overflow;
             overflow = 0;
 
-            if (i < op1->digits.length) {
+            if (i < op1->digit_count) {
                 found_digit = true;
-                uint64_t digit = op1->digits.at(i);
-                if (__builtin_uaddll_overflow(x, digit, &x)) {
-                    overflow += 1;
-                }
+                uint64_t digit = op1_digits[i];
+                overflow += add_u64_overflow(x, digit, &x);
             }
 
-            if (i < op2->digits.length) {
+            if (i < op2->digit_count) {
                 found_digit = true;
-                uint64_t digit = op2->digits.at(i);
-                if (__builtin_uaddll_overflow(x, digit, &x)) {
-                    overflow += 1;
-                }
+                uint64_t digit = op2_digits[i];
+                overflow += add_u64_overflow(x, digit, &x);
             }
 
-            dest->digits.append(x);
-            if (!found_digit)
+            dest->data.digits[i] = x;
+            x += 1;
+
+            if (!found_digit) {
                 break;
+            }
         }
         if (overflow > 0) {
-            dest->digits.append(overflow);
+            dest->data.digits[i] = overflow;
         }
         bigint_normalize(dest);
         return;
     }
-    BigInt *op_pos;
-    BigInt *op_neg;
+    const BigInt *op_pos;
+    const BigInt *op_neg;
     if (op1->is_negative) {
         op_neg = op1;
         op_pos = op2;
@@ -309,8 +432,8 @@ void bigint_add(BigInt *dest, BigInt *op1, BigInt *op2) {
 
     BigInt op_neg_abs = {0};
     bigint_negate(&op_neg_abs, op_neg);
-    BigInt *bigger_op;
-    BigInt *smaller_op;
+    const BigInt *bigger_op;
+    const BigInt *smaller_op;
     switch (bigint_cmp(op_pos, &op_neg_abs)) {
         case CmpEQ:
             bigint_init_unsigned(dest, 0);
@@ -326,26 +449,38 @@ void bigint_add(BigInt *dest, BigInt *op1, BigInt *op2) {
             dest->is_negative = false;
             break;
     }
-    dest->digits.resize(0);
-    uint64_t overflow = 0;
-    for (size_t i = 0; ; i += 1) {
+    const uint64_t *bigger_op_digits = bigint_ptr(bigger_op);
+    const uint64_t *smaller_op_digits = bigint_ptr(smaller_op);
+    uint64_t overflow = sub_u64_overflow(bigger_op_digits[0], smaller_op_digits[0], &dest->data.digit);
+    if (overflow == 0 && bigger_op->digit_count == 1 && smaller_op->digit_count == 1) {
+        dest->digit_count = 1;
+        bigint_normalize(dest);
+        return;
+    }
+    BREAKPOINT;
+    uint64_t first_digit = dest->data.digit;
+    dest->data.digits = allocate_nonzero<uint64_t>(bigger_op->digit_count);
+    dest->data.digits[0] = first_digit;
+    size_t i = 1;
+
+    for (;;) {
         bool found_digit = false;
-        uint64_t x = bigger_op->digits.items[i];
+        uint64_t x = bigger_op_digits[i];
         uint64_t prev_overflow = overflow;
         overflow = 0;
 
-        if (i < smaller_op->digits.length) {
+        if (i < smaller_op->digit_count) {
             found_digit = true;
-            uint64_t digit = smaller_op->digits.items[i];
-            if (__builtin_usubll_overflow(x, digit, &x)) {
-                overflow += 1;
-            }
+            uint64_t digit = smaller_op_digits[i];
+            overflow += sub_u64_overflow(x, digit, &x);
         }
-        if (__builtin_usubll_overflow(x, prev_overflow, &x)) {
+        if (sub_u64_overflow(x, prev_overflow, &x)) {
             found_digit = true;
             overflow += 1;
         }
-        dest->digits.append(x);
+        dest->data.digits[i] = x;
+        i += 1;
+
         if (!found_digit)
             break;
     }
@@ -353,7 +488,7 @@ void bigint_add(BigInt *dest, BigInt *op1, BigInt *op2) {
     bigint_normalize(dest);
 }
 
-static void bigint_wrap(BigInt *dest, BigInt *op, size_t bit_count) {
+static void bigint_wrap(BigInt *dest, const BigInt *op, size_t bit_count) {
     BigInt one = {0};
     bigint_init_unsigned(&one, 1);
 
@@ -366,43 +501,70 @@ static void bigint_wrap(BigInt *dest, BigInt *op, size_t bit_count) {
     bigint_rem(dest, op, &shifted);
 }
 
-void bigint_add_wrap(BigInt *dest, BigInt *op1, BigInt *op2, size_t bit_count) {
+void bigint_add_wrap(BigInt *dest, const BigInt *op1, const BigInt *op2, size_t bit_count) {
+    BREAKPOINT;
     BigInt unwrapped = {0};
     bigint_add(&unwrapped, op1, op2);
     bigint_wrap(dest, &unwrapped, bit_count);
 }
 
-void bigint_sub(BigInt *dest, BigInt *op1, BigInt *op2) {
+void bigint_sub(BigInt *dest, const BigInt *op1, const BigInt *op2) {
     BigInt op2_negated = {0};
     bigint_negate(&op2_negated, op2);
     return bigint_add(dest, op1, &op2_negated);
 }
 
-void bigint_sub_wrap(BigInt *dest, BigInt *op1, BigInt *op2, size_t bit_count) {
+void bigint_sub_wrap(BigInt *dest, const BigInt *op1, const BigInt *op2, size_t bit_count) {
+    BREAKPOINT;
     BigInt op2_negated = {0};
     bigint_negate(&op2_negated, op2);
     return bigint_add_wrap(dest, op1, &op2_negated, bit_count);
 }
 
-static void mul_overflow(uint64_t op1, uint64_t op2, uint64_t *result, uint64_t *carry) {
-    aoeue
+static void mul_overflow(uint64_t x, uint64_t y, uint64_t *result, uint64_t *carry) {
+    if (!mul_u64_overflow(x, y, result)) {
+        *carry = 0;
+        return;
+    }
+
+    BREAKPOINT;
+    unsigned __int128 big_x = x;
+    unsigned __int128 big_y = y;
+    unsigned __int128 big_result = big_x * big_y;
+    *carry = big_result >> 64;
 }
 
-void bigint_mul(BigInt *dest, BigInt *op1, BigInt *op2) {
+void bigint_mul(BigInt *dest, const BigInt *op1, const BigInt *op2) {
+    if (op1->digit_count == 0 || op2->digit_count == 0) {
+        return bigint_init_unsigned(dest, 0);
+    }
     dest->is_negative = (op1->is_negative != op2->is_negative);
-    dest->digits.resize(0);
+    const uint64_t *op1_digits = bigint_ptr(op1);
+    const uint64_t *op2_digits = bigint_ptr(op2);
 
-    uint64_t carry = 0;
-    for (size_t i = 0;; i += 1) {
+    uint64_t carry;
+    mul_overflow(op1_digits[0], op2_digits[0], &dest->data.digit, &carry);
+    if (carry == 0 && op1->digit_count == 1 && op2->digit_count == 1) {
+        dest->digit_count = 1;
+        bigint_normalize(dest);
+        return;
+    }
+    BREAKPOINT;
+    uint64_t first_digit = dest->data.digit;
+    dest->data.digits = allocate_nonzero<uint64_t>(op1->digit_count + op2->digit_count);
+    dest->data.digits[0] = first_digit;
+    size_t i = 1;
+
+    for (;;) {
         bool found_digit = false;
         uint64_t x;
         uint64_t prev_carry = carry;
         carry = 0;
 
-        if (i < op1->digits.length && i < op2->digits.length) {
+        if (i < op1->digit_count && i < op2->digit_count) {
             found_digit = true;
-            uint64_t digit1 = op1->digits.at(i);
-            uint64_t digit2 = op2->digits.at(i);
+            uint64_t digit1 = op1_digits[i];
+            uint64_t digit2 = op2_digits[i];
             mul_overflow(digit1, digit2, &x, &carry);
         } else {
             x = 0;
@@ -410,93 +572,352 @@ void bigint_mul(BigInt *dest, BigInt *op1, BigInt *op2) {
 
         if (prev_carry > 0) {
             found_digit = true;
-            if (__builtin_uaddll_overflow(x, prev_carry, &x)) {
-                carry += 1;
-            }
+            carry += add_u64_overflow(x, prev_carry, &x);
         }
 
-        dest->digits.append(x);
+        dest->data.digits[i] = x;
+        i += 1;
+
         if (!found_digit)
             break;
     }
     if (carry > 0) {
-        dest->digits.append(carry);
+        dest->data.digits[i] = carry;
     }
     bigint_normalize(dest);
 }
 
-void bigint_mul_wrap(BigInt *dest, BigInt *op1, BigInt *op2, size_t bit_count) {
+void bigint_mul_wrap(BigInt *dest, const BigInt *op1, const BigInt *op2, size_t bit_count) {
+    BREAKPOINT;
     BigInt unwrapped = {0};
     bigint_mul(&unwrapped, op1, op2);
     bigint_wrap(dest, &unwrapped, bit_count);
 }
 
-void bigint_div_trunc(BigInt *dest, BigInt *op1, BigInt *op2) {
-    aoeu
+void bigint_div_trunc(BigInt *dest, const BigInt *op1, const BigInt *op2) {
+    BREAKPOINT;
+    assert(op2->digit_count != 0); // division by zero
+    if (op1->digit_count == 0) {
+        bigint_init_unsigned(dest, 0);
+        return;
+    }
+    if (op1->digit_count != 1 || op2->digit_count != 1) {
+        zig_panic("TODO bigint div_trunc with >1 digits");
+    }
+    const uint64_t *op1_digits = bigint_ptr(op1);
+    const uint64_t *op2_digits = bigint_ptr(op2);
+    dest->data.digit = op1_digits[0] / op2_digits[0];
+    dest->digit_count = 1;
+    dest->is_negative = op1->is_negative != op2->is_negative;
+    bigint_normalize(dest);
 }
 
-void bigint_div_floor(BigInt *dest, BigInt *op1, BigInt *op2) {
-    aoeu
+void bigint_div_floor(BigInt *dest, const BigInt *op1, const BigInt *op2) {
+    BREAKPOINT;
+    if (op1->is_negative != op2->is_negative) {
+        bigint_div_trunc(dest, op1, op2);
+        BigInt mult_again = {0};
+        bigint_mul(&mult_again, dest, op2);
+        if (bigint_cmp(&mult_again, op1) != CmpEQ) {
+            BigInt tmp = {0};
+            bigint_init_bigint(&tmp, dest);
+            BigInt one = {0};
+            bigint_init_unsigned(&one, 1);
+            bigint_add(dest, &tmp, &one);
+        }
+        dest->is_negative = true;
+        bigint_normalize(dest);
+    } else {
+        bigint_div_trunc(dest, op1, op2);
+    }
 }
 
-void bigint_rem(BigInt *dest, BigInt *op1, BigInt *op2) {
-    aoeu
+void bigint_rem(BigInt *dest, const BigInt *op1, const BigInt *op2) {
+    BREAKPOINT;
+    assert(op2->digit_count != 0); // division by zero
+    if (op1->digit_count == 0) {
+        bigint_init_unsigned(dest, 0);
+        return;
+    }
+    if (op1->digit_count != 1 || op2->digit_count != 1) {
+        zig_panic("TODO bigint rem with >1 digits");
+    }
+    const uint64_t *op1_digits = bigint_ptr(op1);
+    const uint64_t *op2_digits = bigint_ptr(op2);
+    dest->data.digit = op1_digits[0] % op2_digits[0];
+    dest->digit_count = 1;
+    dest->is_negative = op1->is_negative;
+    bigint_normalize(dest);
 }
 
-void bigint_mod(BigInt *dest, BigInt *op1, BigInt *op2) {
-    aoeu
+void bigint_mod(BigInt *dest, const BigInt *op1, const BigInt *op2) {
+    BREAKPOINT;
+    if (op1->is_negative) {
+        BigInt first_rem = {0};
+        bigint_rem(&first_rem, op1, op2);
+        BigInt op2_minus_rem = {0};
+        bigint_sub(&op2_minus_rem, op2, &first_rem);
+        bigint_rem(dest, &op2_minus_rem, op2);
+        dest->is_negative = false;
+    } else {
+        bigint_rem(dest, op1, op2);
+    }
 }
 
-void bigint_or(BigInt *dest, BigInt *op1, BigInt *op2) {
-    aoeu
+void bigint_or(BigInt *dest, const BigInt *op1, const BigInt *op2) {
+    if (op1->digit_count == 0) {
+        return bigint_init_bigint(dest, op2);
+    }
+    if (op2->digit_count == 0) {
+        return bigint_init_bigint(dest, op1);
+    }
+    BREAKPOINT;
+    if (op1->is_negative || op2->is_negative) {
+        size_t big_bit_count = max(bigint_bits_needed(op1), bigint_bits_needed(op2));
+
+        BigInt twos_comp_op1 = {0};
+        to_twos_complement(&twos_comp_op1, op1, big_bit_count);
+
+        BigInt twos_comp_op2 = {0};
+        to_twos_complement(&twos_comp_op2, op2, big_bit_count);
+
+        BigInt twos_comp_dest = {0};
+        bigint_or(&twos_comp_dest, &twos_comp_op1, &twos_comp_op2);
+
+        from_twos_complement(dest, &twos_comp_dest, big_bit_count);
+    } else {
+        dest->is_negative = false;
+        const uint64_t *op1_digits = bigint_ptr(op1);
+        const uint64_t *op2_digits = bigint_ptr(op2);
+        if (op1->digit_count == 1 && op2->digit_count == 1) {
+            dest->digit_count = 1;
+            dest->data.digit = op1_digits[0] | op2_digits[0];
+            bigint_normalize(dest);
+            return;
+        }
+        uint64_t first_digit = dest->data.digit;
+        dest->digit_count = max(op1->digit_count, op2->digit_count);
+        dest->data.digits = allocate_nonzero<uint64_t>(dest->digit_count);
+        dest->data.digits[0] = first_digit;
+        size_t i = 1;
+        for (; i < dest->digit_count; i += 1) {
+            uint64_t digit = 0;
+            if (i < op1->digit_count) {
+                digit |= op1_digits[i];
+            }
+            if (i < op2->digit_count) {
+                digit |= op2_digits[i];
+            }
+            dest->data.digits[i] = digit;
+        }
+        bigint_normalize(dest);
+    }
 }
 
-void bigint_and(BigInt *dest, BigInt *op1, BigInt *op2) {
-    aoeu
+void bigint_and(BigInt *dest, const BigInt *op1, const BigInt *op2) {
+    BREAKPOINT;
+    if (op1->digit_count == 0 || op2->digit_count == 0) {
+        return bigint_init_unsigned(dest, 0);
+    }
+    if (op1->is_negative || op2->is_negative) {
+        size_t big_bit_count = max(bigint_bits_needed(op1), bigint_bits_needed(op2));
+
+        BigInt twos_comp_op1 = {0};
+        to_twos_complement(&twos_comp_op1, op1, big_bit_count);
+
+        BigInt twos_comp_op2 = {0};
+        to_twos_complement(&twos_comp_op2, op2, big_bit_count);
+
+        BigInt twos_comp_dest = {0};
+        bigint_and(&twos_comp_dest, &twos_comp_op1, &twos_comp_op2);
+
+        from_twos_complement(dest, &twos_comp_dest, big_bit_count);
+    } else {
+        dest->is_negative = false;
+        const uint64_t *op1_digits = bigint_ptr(op1);
+        const uint64_t *op2_digits = bigint_ptr(op2);
+        if (op1->digit_count == 1 && op2->digit_count == 1) {
+            dest->digit_count = 1;
+            dest->data.digit = op1_digits[0] & op2_digits[0];
+            bigint_normalize(dest);
+            return;
+        }
+        uint64_t first_digit = dest->data.digit;
+        dest->digit_count = max(op1->digit_count, op2->digit_count);
+        dest->data.digits = allocate_nonzero<uint64_t>(dest->digit_count);
+        dest->data.digits[0] = first_digit;
+        size_t i = 1;
+        for (; i < op1->digit_count && i < op2->digit_count; i += 1) {
+            dest->data.digits[i] = op1_digits[i] & op2_digits[i];
+        }
+        for (; i < dest->digit_count; i += 1) {
+            dest->data.digits[i] = 0;
+        }
+        bigint_normalize(dest);
+    }
 }
 
-void bigint_xor(BigInt *dest, BigInt *op1, BigInt *op2) {
-    aoeu
+void bigint_xor(BigInt *dest, const BigInt *op1, const BigInt *op2) {
+    BREAKPOINT;
+    if (op1->is_negative || op2->is_negative) {
+        size_t big_bit_count = max(bigint_bits_needed(op1), bigint_bits_needed(op2));
+
+        BigInt twos_comp_op1 = {0};
+        to_twos_complement(&twos_comp_op1, op1, big_bit_count);
+
+        BigInt twos_comp_op2 = {0};
+        to_twos_complement(&twos_comp_op2, op2, big_bit_count);
+
+        BigInt twos_comp_dest = {0};
+        bigint_xor(&twos_comp_dest, &twos_comp_op1, &twos_comp_op2);
+
+        from_twos_complement(dest, &twos_comp_dest, big_bit_count);
+    } else {
+        dest->is_negative = false;
+        const uint64_t *op1_digits = bigint_ptr(op1);
+        const uint64_t *op2_digits = bigint_ptr(op2);
+        if (op1->digit_count == 1 && op2->digit_count == 1) {
+            dest->digit_count = 1;
+            dest->data.digit = op1_digits[0] ^ op2_digits[0];
+            bigint_normalize(dest);
+            return;
+        }
+        uint64_t first_digit = dest->data.digit;
+        dest->digit_count = max(op1->digit_count, op2->digit_count);
+        dest->data.digits = allocate_nonzero<uint64_t>(dest->digit_count);
+        dest->data.digits[0] = first_digit;
+        size_t i = 1;
+        for (; i < op1->digit_count && i < op2->digit_count; i += 1) {
+            dest->data.digits[i] = op1_digits[i] ^ op2_digits[i];
+        }
+        for (; i < dest->digit_count; i += 1) {
+            if (i < op1->digit_count) {
+                dest->data.digits[i] = op1_digits[i];
+            }
+            if (i < op2->digit_count) {
+                dest->data.digits[i] = op2_digits[i];
+            }
+        }
+        bigint_normalize(dest);
+    }
 }
 
-void bigint_shl(BigInt *dest, BigInt *op1, BigInt *op2) {
-    aoeu
+void bigint_shl(BigInt *dest, const BigInt *op1, const BigInt *op2) {
+    assert(!op2->is_negative);
+
+    if (op2->digit_count == 0) {
+        bigint_init_bigint(dest, op1);
+        return;
+    }
+
+    if (op2->digit_count != 1) {
+        zig_panic("TODO shift left by amount greater than 64 bit integer");
+    }
+
+    const uint64_t *op1_digits = bigint_ptr(op1);
+    uint64_t shift_amt = bigint_as_unsigned(op2);
+
+    if (op1->digit_count == 1) {
+        dest->data.digit = op1_digits[0] << shift_amt;
+        if (dest->data.digit >= op1_digits[0]) {
+            dest->digit_count = 1;
+            dest->is_negative = op1->is_negative;
+            return;
+        }
+    }
+
+    BREAKPOINT;
+    uint64_t digit_shift_count = shift_amt / 64;
+    uint64_t leftover_shift_count = shift_amt % 64;
+
+    dest->data.digits = allocate<uint64_t>(op1->digit_count + digit_shift_count + 1);
+    dest->digit_count = digit_shift_count;
+    uint64_t carry = 0;
+    for (size_t i = 0; i < op1->digit_count; i += 1) {
+        uint64_t digit = op1_digits[i];
+        dest->data.digits[dest->digit_count] = carry | (digit << leftover_shift_count);
+        dest->digit_count += 1;
+        carry = digit >> (64 - leftover_shift_count);
+    }
+    dest->data.digits[dest->digit_count] = carry;
+    dest->digit_count += 1;
+    dest->is_negative = op1->is_negative;
+    bigint_normalize(dest);
 }
 
-void bigint_shl_wrap(BigInt *dest, BigInt *op1, BigInt *op2, size_t bit_count) {
+void bigint_shl_wrap(BigInt *dest, const BigInt *op1, const BigInt *op2, size_t bit_count) {
+    BREAKPOINT;
     BigInt unwrapped = {0};
     bigint_shl(&unwrapped, op1, op2);
     bigint_wrap(dest, &unwrapped, bit_count);
 }
 
-void bigint_shr(BigInt *dest, BigInt *op1, BigInt *op2) {
-    aoeu
+void bigint_shr(BigInt *dest, const BigInt *op1, const BigInt *op2) {
+    BREAKPOINT;
+    assert(!op2->is_negative);
+
+    if (op1->digit_count == 0) {
+        return bigint_init_unsigned(dest, 0);
+    }
+
+    if (op2->digit_count == 0) {
+        return bigint_init_bigint(dest, op1);
+    }
+
+    if (op2->digit_count != 1) {
+        zig_panic("TODO shift right by amount greater than 64 bit integer");
+    }
+
+    const uint64_t *op1_digits = bigint_ptr(op1);
+    uint64_t shift_amt = bigint_as_unsigned(op2);
+
+    if (op1->digit_count == 1) {
+        dest->data.digit = op1_digits[0] >> shift_amt;
+        dest->digit_count = 1;
+        dest->is_negative = op1->is_negative;
+        bigint_normalize(dest);
+        return;
+    }
+
+    size_t digit_shift_count = shift_amt / 64;
+    size_t leftover_shift_count = shift_amt % 64;
+
+    if (digit_shift_count >= op1->digit_count) {
+        return bigint_init_unsigned(dest, 0);
+    }
+
+    dest->digit_count = op1->digit_count - digit_shift_count;
+    dest->data.digits = allocate<uint64_t>(dest->digit_count);
+    uint64_t carry = 0;
+    for (size_t op_digit_index = op1->digit_count - 1;;) {
+        uint64_t digit = op1_digits[op_digit_index];
+        size_t dest_digit_index = op_digit_index - digit_shift_count;
+        dest->data.digits[dest_digit_index] = carry | (digit >> leftover_shift_count);
+        carry = (0xffffffffffffffffULL << leftover_shift_count) & digit;
+
+        if (dest_digit_index == 0) { break; }
+        op_digit_index -= 1;
+    }
+    dest->is_negative = op1->is_negative;
+    bigint_normalize(dest);
 }
 
-void bigint_negate(BigInt *dest, BigInt *op) {
+void bigint_negate(BigInt *dest, const BigInt *op) {
     bigint_init_bigint(dest, op);
     dest->is_negative = !dest->is_negative;
     bigint_normalize(dest);
 }
 
-void bigint_to_bigfloat(BigFloat *dest, BigInt *op) {
-    dest->value = 0.0;
-    if (op->digits.length == 0)
-        return;
-
-    double base = (double)UINT64_MAX;
-
-    for (size_t i = op->digits.length - 1;;) {
-        uint64_t digit = op->digits.at(i);
-        dest->value *= base;
-        dest->value += (double)digit;
-
-        if (i == 0) return;
-        i -= 1;
-    }
+void bigint_negate_wrap(BigInt *dest, const BigInt *op, size_t bit_count) {
+    BREAKPOINT;
+    BigInt zero;
+    bigint_init_unsigned(&zero, 0);
+    bigint_sub_wrap(dest, &zero, op, bit_count);
 }
 
-void bigint_not(BigInt *dest, BigInt *op, size_t bit_count) {
+// TODO does not handle is_signed correctly
+void bigint_not(BigInt *dest, const BigInt *op, size_t bit_count, bool is_signed) {
+    BREAKPOINT;
     if (bit_count == 0) {
         bigint_init_unsigned(dest, 0);
         return;
@@ -506,61 +927,113 @@ void bigint_not(BigInt *dest, BigInt *op, size_t bit_count) {
         to_twos_complement(&twos_comp, op, bit_count);
 
         BigInt inverted = {0};
-        bigint_not(&inverted, &twos_comp, bit_count);
+        bigint_not(&inverted, &twos_comp, bit_count, false);
 
         from_twos_complement(dest, &inverted, bit_count);
     } else {
         dest->is_negative = false;
-        dest->digits.resize(op->digits.length);
-        for (size_t i = 0; i < op->digits.length; i += 1) {
-            dest->digits.items[i] = ~op->digits.items[i];
+        const uint64_t *op_digits = bigint_ptr(op);
+        if (bit_count <= 64) {
+            dest->digit_count = 1;
+            if (op->digit_count == 0) {
+                if (bit_count == 64) {
+                    dest->data.digit = UINT64_MAX;
+                } else {
+                    dest->data.digit = (1 << bit_count) - 1;
+                }
+            } else if (op->digit_count == 1) {
+                dest->data.digit = ~op_digits[0];
+                if (bit_count != 64) {
+                    uint64_t mask = (1 << bit_count) - 1;
+                    dest->data.digit &= mask;
+                }
+            }
+            bigint_normalize(dest);
+            return;
         }
-        size_t digit_index = dest->digits.length - (bit_count / 64) - 1;
+        dest->digit_count = bit_count / 64;
+        assert(dest->digit_count >= op->digit_count);
+        dest->data.digits = allocate_nonzero<uint64_t>(dest->digit_count);
+        size_t i = 0;
+        for (; i < op->digit_count; i += 1) {
+            dest->data.digits[i] = ~op_digits[i];
+        }
+        for (; i < dest->digit_count; i += 1) {
+            dest->data.digits[i] = 0xffffffffffffffffULL;
+        }
+        size_t digit_index = dest->digit_count - (bit_count / 64) - 1;
         size_t digit_bit_index = bit_count % 64;
-        if (digit_index < dest->digits.length) {
+        if (digit_index < dest->digit_count) {
             uint64_t mask = (1 << digit_bit_index) - 1;
-            dest->digits.items[digit_index] &= mask;
+            dest->data.digits[digit_index] &= mask;
         }
         bigint_normalize(dest);
     }
 }
 
-void bigint_truncate(BigInt *dest, BigInt *op, size_t bit_count) {
-    if (bit_count == 0) {
+void bigint_truncate(BigInt *dest, const BigInt *op, size_t bit_count, bool is_signed) {
+    BREAKPOINT;
+    if (bit_count == 0 || op->digit_count == 0) {
         bigint_init_unsigned(dest, 0);
         return;
     }
-    if (op->is_negative) {
-        BigInt twos_comp = {0};
+    if (is_signed) {
+        BigInt twos_comp;
         to_twos_complement(&twos_comp, op, bit_count);
 
-        BigInt truncated = {0};
-        bigint_truncate(&truncated, &twos_comp, bit_count);
+        BigInt truncated;
+        bigint_truncate(&truncated, &twos_comp, bit_count, false);
 
         from_twos_complement(dest, &truncated, bit_count);
-    } else {
-
+        return;
+    }
+    dest->is_negative = false;
+    const uint64_t *op_digits = bigint_ptr(op);
+    if (op->digit_count == 1) {
+        dest->data.digit = op_digits[0];
+        if (bit_count < 64) {
+            dest->data.digit &= (1ULL << bit_count) - 1;
+        }
+        dest->digit_count = 1;
+        return;
+    }
+    size_t digits_to_copy = bit_count / 64;
+    size_t leftover_bits = bit_count % 64;
+    dest->digit_count = digits_to_copy + ((leftover_bits == 0) ? 0 : 1);
+    dest->data.digits = allocate_nonzero<uint64_t>(dest->digit_count);
+    for (size_t i = 0; i < digits_to_copy; i += 1) {
+        uint64_t digit = (i < op->digit_count) ? op_digits[i] : 0;
+        dest->data.digits[i] = digit;
+    }
+    if (leftover_bits != 0) {
+        uint64_t digit = (digits_to_copy < op->digit_count) ? op_digits[digits_to_copy] : 0;
+        dest->data.digits[digits_to_copy] = digit & ((1ULL << leftover_bits) - 1);
     }
 }
 
-Cmp bigint_cmp(BigInt *op1, BigInt *op2) {
+Cmp bigint_cmp(const BigInt *op1, const BigInt *op2) {
     if (op1->is_negative && !op2->is_negative) {
         return CmpLT;
     } else if (!op1->is_negative && op2->is_negative) {
         return CmpGT;
-    } else if (op1->digits.length > op2->digits.length) {
+    } else if (op1->digit_count > op2->digit_count) {
         return op1->is_negative ? CmpLT : CmpGT;
-    } else if (op2->digits.length > op1->digits.length) {
+    } else if (op2->digit_count > op1->digit_count) {
         return op1->is_negative ? CmpGT : CmpLT;
-    } else if (op1->digits.length == 0) {
+    } else if (op1->digit_count == 0) {
         return CmpEQ;
     }
-    for (size_t i = op1->digits.length - 1; ;) {
-        uint64_t op1_digit = op1->digits.at(i);
-        uint64_t op2_digit = op2->digits.at(i);
+    const uint64_t *op1_digits = bigint_ptr(op1);
+    const uint64_t *op2_digits = bigint_ptr(op2);
+    for (size_t i = op1->digit_count - 1; ;) {
+        uint64_t op1_digit = op1_digits[i];
+        uint64_t op2_digit = op2_digits[i];
 
         if (op1_digit > op2_digit) {
             return op1->is_negative ? CmpLT : CmpGT;
+        }
+        if (op1_digit < op2_digit) {
+            return op1->is_negative ? CmpGT : CmpLT;
         }
 
         if (i == 0) {
@@ -570,14 +1043,13 @@ Cmp bigint_cmp(BigInt *op1, BigInt *op2) {
     }
 }
 
-Buf *bigint_to_buf(BigInt *bn, uint64_t base) {
-    size_t index = bn->digits.length;
+void bigint_write_buf(Buf *buf, const BigInt *op, uint64_t base) {
+    BREAKPOINT;
 
-    Buf *result = buf_alloc();
-    if (bn->is_negative) {
-        buf_append_char(result, '-');
+    if (op->is_negative) {
+        buf_append_char(buf, '-');
     }
-    size_t first_digit_index = buf_len(result);
+    size_t first_digit_index = buf_len(buf);
 
     BigInt digit_bi = {0};
     BigInt a1 = {0};
@@ -585,41 +1057,37 @@ Buf *bigint_to_buf(BigInt *bn, uint64_t base) {
 
     BigInt *a = &a1;
     BigInt *other_a = &a2;
-    bigint_init_bigint(a, bn);
+    bigint_init_bigint(a, op);
 
     BigInt base_bi = {0};
     bigint_init_unsigned(&base_bi, 10);
 
-    BigInt zero = {0};
-    bigint_init_unsigned(&zero, 0);
-
     for (;;) {
         bigint_rem(&digit_bi, a, &base_bi);
-        uint8_t digit = bigint_to_unsigned(&digit_bi, 8);
-        buf_append_char(result, digit_to_char(digit));
-        bigint_div_trunc(&other_a, &a, &base_bi);
+        uint8_t digit = bigint_as_unsigned(&digit_bi);
+        buf_append_char(buf, digit_to_char(digit, false));
+        bigint_div_trunc(other_a, a, &base_bi);
         {
             BigInt *tmp = a;
             a = other_a;
             other_a = tmp;
         }
-        if (bigint_cmp(a, &zero) == CmpEQ) {
+        if (bigint_cmp_zero(a) == CmpEQ) {
             break;
         }
     }
 
     // reverse
-    for (size_t i = first_digit_index; i < buf_len(result); i += 1) {
-        size_t other_i = buf_len(result) + first_digit_index - i - 1;
-        uint8_t tmp = buf_ptr(result)[i];
-        buf_ptr(result)[i] = buf_ptr(result)[other_i];
-        buf_ptr(result)[other_i] = tmp;
+    for (size_t i = first_digit_index; i < buf_len(buf); i += 1) {
+        size_t other_i = buf_len(buf) + first_digit_index - i - 1;
+        uint8_t tmp = buf_ptr(buf)[i];
+        buf_ptr(buf)[i] = buf_ptr(buf)[other_i];
+        buf_ptr(buf)[other_i] = tmp;
     }
-    return result;
 }
 
-size_t bigint_ctz(BigInt *bi, size_t bit_count) {
-    if (bi->digits.length == 0 || bit_count == 0)
+size_t bigint_ctz(const BigInt *bi, size_t bit_count) {
+    if (bi->digit_count == 0 || bit_count == 0)
         return 0;
 
     BigInt twos_comp = {0};
@@ -634,8 +1102,8 @@ size_t bigint_ctz(BigInt *bi, size_t bit_count) {
     return count;
 }
 
-size_t bigint_clz(BigInt *bi, size_t bit_count) {
-    if (bi->is_negative || bi->digits.length == 0 || bit_count == 0)
+size_t bigint_clz(const BigInt *bi, size_t bit_count) {
+    if (bi->is_negative || bi->digit_count == 0 || bit_count == 0)
         return 0;
 
     size_t count = 0;
@@ -648,4 +1116,41 @@ size_t bigint_clz(BigInt *bi, size_t bit_count) {
         i -= 1;
     }
     return count;
+}
+
+uint64_t bigint_as_unsigned(const BigInt *bigint) {
+    assert(!bigint->is_negative);
+    if (bigint->digit_count == 0) {
+        return 0;
+    } else if (bigint->digit_count == 1) {
+        return bigint->data.digit;
+    } else {
+        zig_unreachable();
+    }
+}
+
+int64_t bigint_as_signed(const BigInt *bigint) {
+    BREAKPOINT;
+    if (bigint->digit_count == 0) {
+        return 0;
+    } else if (bigint->digit_count == 1) {
+        if (bigint->is_negative) {
+            if (bigint->data.digit <= 9223372036854775808ULL) {
+                return (-((int64_t)(bigint->data.digit - 1))) - 1;
+            } else {
+                zig_unreachable();
+            }
+        } else {
+            return bigint->data.digit;
+        }
+    } else {
+        zig_unreachable();
+    }
+}
+
+Cmp bigint_cmp_zero(const BigInt *op) {
+    if (op->digit_count == 0) {
+        return CmpEQ;
+    }
+    return op->is_negative ? CmpLT : CmpGT;
 }
