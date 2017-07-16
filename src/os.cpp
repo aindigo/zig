@@ -726,10 +726,11 @@ double os_get_time(void) {
     QueryPerformanceCounter((LARGE_INTEGER*) &time);
     return time * win32_time_resolution;
 #elif defined(__MACH__)
+    clock_serv_t cclock;
     mach_timespec_t mts;
-
-    kern_return_t err = clock_get_time(cclock, &mts);
-    assert(!err);
+    host_get_clock_service(mach_host_self(), CALENDAR_CLOCK, &cclock);
+    clock_get_time(cclock, &mts);
+    mach_port_deallocate(mach_task_self(), cclock);
 
     double seconds = (double)mts.tv_sec;
     seconds += ((double)mts.tv_nsec) / 1000000000.0;

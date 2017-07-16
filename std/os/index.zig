@@ -66,11 +66,7 @@ pub fn getRandomBytes(buf: []u8) -> %void {
                 posix.getErrno(posix.getrandom(buf.ptr, buf.len, 0))
             },
             Os.darwin, Os.macosx, Os.ios => {
-                if (builtin.link_libc) {
-                    if (posix.getrandom(buf.ptr, buf.len) == -1) *c._errno() else 0
-                } else {
-                    posix.getErrno(posix.getrandom(buf.ptr, buf.len))
-                }
+                posix.getErrno(posix.getrandom(buf.ptr, buf.len))
             },
             Os.windows => {
                 var hCryptProv: windows.HCRYPTPROV = undefined;

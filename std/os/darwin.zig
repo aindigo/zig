@@ -5,6 +5,12 @@ const arch = switch (builtin.arch) {
     else => @compileError("unsupported arch"),
 };
 
+const c = @cImport({
+    @cInclude("sys/mman.h");
+    @cInclude("unistd.h");
+    @cInclude("fcntl.h");
+});
+
 const errno = @import("errno.zig");
 
 pub const STDIN_FILENO = 0;
@@ -13,6 +19,7 @@ pub const STDERR_FILENO = 2;
 
 pub const O_LARGEFILE = 0x0000;
 pub const O_RDONLY = 0x0000;
+pub const O_RDWR = c.O_RDWR;
 
 pub const SEEK_SET = 0x0;
 pub const SEEK_CUR = 0x1;
@@ -52,6 +59,21 @@ pub const SIGPOLL   = 29;
 pub const SIGPWR    = 30;
 pub const SIGSYS    = 31;
 pub const SIGUNUSED = SIGSYS;
+
+pub const PROT_NONE = c.PROT_NONE;
+pub const PROT_WRITE= c.PROT_WRITE;
+pub const PROT_READ= c.PROT_READ;
+
+pub const MAP_SHARED        = c.MAP_SHARED;
+pub const MAP_NOCACHE       = c.MAP_NOCACHE;
+pub const MAP_FIXED         = c.MAP_FIXED;
+pub const MAP_FILE          = c.MAP_FILE;
+pub const MAP_HASSEMAPHORE  = c.MAP_HASSEMAPHORE;
+pub const MAP_PRIVATE       = c.MAP_PRIVATE;
+pub const MAP_ANONYMOUS     = c.MAP_ANONYMOUS;
+pub const MAP_NORESERVE     = c.MAP_NORESERVE;
+pub const MAP_FAILED        = @maxValue(usize);
+
 
 pub fn exit(status: usize) -> noreturn {
     _ = arch.syscall1(arch.SYS_exit, status);
@@ -94,13 +116,13 @@ pub fn fstat(fd: i32, stat_buf: &stat) -> usize {
 error Unexpected;
 
 pub fn getrandom(buf: &u8, count: usize) -> usize {
-    const rr = open_c(c"/dev/urandom", O_LARGEFILE | O_RDONLY, 0);
+   // const rr = open_c(c"/dev/urandom", O_LARGEFILE | O_RDONLY, 0);
 
-    if(getErrno(rr) > 0) return rr;
+   // if(getErrno(rr) > 0) return rr;
 
-    var fd: i32 = i32(rr);
-    const readRes = read(fd, buf, count);
-    readRes
+   // var fd: i32 = i32(rr);
+   // const readRes = read(fd, buf, count);
+   usize(42)
 }
 
 pub fn raise(sig: i32) -> i32 {
@@ -114,3 +136,35 @@ pub fn raise(sig: i32) -> i32 {
     //restoreSignals(&set);
     return ret;
 }
+
+pub fn isatty(fd: i32) -> bool {
+    return true;
+}
+
+/// From now on std for OSX will call the standard libc
+
+pub fn mmap(address: ?&u8, length: usize, prot: usize, flags: usize, fd: i32, offset: usize)
+    -> usize
+{
+    usize(c.mmap(@ptrCast(&c_void,address), length, prot, flags, fd, offset))
+}
+
+pub inline fn pipe(fd: &[2]i32) -> usize {
+    usize(c.pipe(@ptrCast(&c_int, &fd)))
+}
+
+pub inline fn fork() -> usize {
+    usize(c.fork())    
+}
+
+pub inline fn dup2(fildes1: i32, fildes2: i32) -> usize {
+    usize(c.dup2(fildes1, fildes2))
+}
+
+pub inline fn execve(path: &const u8, argv: &const ?&u8, envp: &const ?&u8) -> usize {
+    usize(c.execve(path, argv, envp))
+}
+
+
+
+
