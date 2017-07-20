@@ -21,14 +21,14 @@ pub const SYS_getpid = 0x2000030;
 pub const SYS_fstat = 0x20000BD;
 pub const SYS_lseek = 0x20000C7;
 
-pub inline fn syscall0(number: usize) -> usize {
+pub  fn syscall0(number: usize) -> usize {
     asm volatile ("syscall"
         : [ret] "={rax}" (-> usize)
         : [number] "{rax}" (number)
         : "rcx", "r11")
 }
 
-pub inline fn syscall1(number: usize, arg1: usize) -> usize {
+pub  fn syscall1(number: usize, arg1: usize) -> usize {
     asm volatile ("syscall"
         : [ret] "={rax}" (-> usize)
         : [number] "{rax}" (number),
@@ -36,7 +36,7 @@ pub inline fn syscall1(number: usize, arg1: usize) -> usize {
         : "rcx", "r11")
 }
 
-pub inline fn syscall2(number: usize, arg1: usize, arg2: usize) -> usize {
+pub  fn syscall2(number: usize, arg1: usize, arg2: usize) -> usize {
     asm volatile ("syscall"
         : [ret] "={rax}" (-> usize)
         : [number] "{rax}" (number),
@@ -45,7 +45,7 @@ pub inline fn syscall2(number: usize, arg1: usize, arg2: usize) -> usize {
         : "rcx", "r11")
 }
 
-pub inline fn syscall3(number: usize, arg1: usize, arg2: usize, arg3: usize) -> usize {
+pub  fn syscall3(number: usize, arg1: usize, arg2: usize, arg3: usize) -> usize {
     asm volatile ("syscall"
         : [ret] "={rax}" (-> usize)
         : [number] "{rax}" (number),

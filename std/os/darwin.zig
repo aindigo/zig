@@ -9,6 +9,10 @@ const c = @cImport({
     @cInclude("sys/mman.h");
     @cInclude("unistd.h");
     @cInclude("fcntl.h");
+    @cInclude("sys/wait.h");
+    @cInclude("sys/types.h");
+    @cInclude("stdio.h");
+    @cInclude("sys/stat.h");
 });
 
 const errno = @import("errno.zig");
@@ -20,6 +24,11 @@ pub const STDERR_FILENO = 2;
 pub const O_LARGEFILE = 0x0000;
 pub const O_RDONLY = 0x0000;
 pub const O_RDWR = c.O_RDWR;
+pub const O_WRONLY = c.O_WRONLY;
+pub const O_CREAT = c.O_CREAT;
+pub const O_CLOEXEC = c.O_CLOEXEC;
+pub const O_TRUNC = c.O_TRUNC;
+
 
 pub const SEEK_SET = 0x0;
 pub const SEEK_CUR = 0x1;
@@ -73,6 +82,17 @@ pub const MAP_PRIVATE       = c.MAP_PRIVATE;
 pub const MAP_ANONYMOUS     = c.MAP_ANONYMOUS;
 pub const MAP_NORESERVE     = c.MAP_NORESERVE;
 pub const MAP_FAILED        = @maxValue(usize);
+
+/// copied from linux.zig , may be this is wrong for darwin
+
+fn unsigned(s: i32) -> u32 { *@ptrCast(&u32, &s) }
+fn signed(s: u32) -> i32 { *@ptrCast(&i32, &s) }
+pub fn WEXITSTATUS(s: i32) -> i32 { signed((unsigned(s) & 0xff00) >> 8) }
+pub fn WTERMSIG(s: i32) -> i32 { signed(unsigned(s) & 0x7f) }
+pub fn WSTOPSIG(s: i32) -> i32 { WEXITSTATUS(s) }
+pub fn WIFEXITED(s: i32) -> bool { WTERMSIG(s) == 0 }
+pub fn WIFSTOPPED(s: i32) -> bool { (u16)(((unsigned(s)&0xffff)*%0x10001)>>8) > 0x7f00 }
+pub fn WIFSIGNALED(s: i32) -> bool { (unsigned(s)&0xffff)-%1 < 0xff }
 
 
 pub fn exit(status: usize) -> noreturn {
@@ -143,28 +163,57 @@ pub fn isatty(fd: i32) -> bool {
 
 /// From now on std for OSX will call the standard libc
 
-pub fn mmap(address: ?&u8, length: usize, prot: usize, flags: usize, fd: i32, offset: usize)
+pub  fn mmap(address: ?&u8, length: usize, prot: usize, flags: usize, fd: i32, offset: usize)
     -> usize
 {
-    usize(c.mmap(@ptrCast(&c_void,address), length, prot, flags, fd, offset))
+    //usize(c.mmap(@ptrCast(&c_void,address), length, c_int(prot), c_int(flags), fd, c_longlong(offset)))
+    usize(42)
 }
 
-pub inline fn pipe(fd: &[2]i32) -> usize {
+pub  fn pipe(fd: &[2]i32) -> usize {
     usize(c.pipe(@ptrCast(&c_int, &fd)))
 }
 
-pub inline fn fork() -> usize {
+pub  fn fork() -> usize {
     usize(c.fork())    
 }
 
-pub inline fn dup2(fildes1: i32, fildes2: i32) -> usize {
+pub  fn dup2(fildes1: i32, fildes2: i32) -> usize {
     usize(c.dup2(fildes1, fildes2))
 }
 
-pub inline fn execve(path: &const u8, argv: &const ?&u8, envp: &const ?&u8) -> usize {
+pub  fn execve(path: &const u8, argv: &const ?&u8, envp: &const ?&u8) -> usize {
     usize(c.execve(path, argv, envp))
 }
+pub fn chdir(path: &const u8) -> usize {
+    usize(c.chdir(path))
+}
 
+pub fn rename(old: &const u8, new: &const u8) -> usize {
+    usize(c.rename(old, new))
+}
 
+pub fn munmap(address: &u8, length: usize) -> usize {
+    usize(c.munmap(@ptrCast(&c_void, address), length))
+}
 
+pub fn waitpid(pid: i32, status: &i32, options: i32) -> usize {
+    usize(c.waitpid(pid, @ptrCast(&c_int, status), options))
+}
+
+pub fn unlink(path: &const u8) -> usize {
+    usize(c.unlink(path))
+}
+
+pub fn getcwd(buf: &u8, size: usize) -> usize {
+    usize(c.getcwd(buf, size))
+}
+
+pub fn symlink(existing: &const u8, new: &const u8) -> usize {
+    usize(c.symlink(existing, new))
+}
+
+pub fn mkdir(path: &const u8, mode: usize) -> usize {
+    usize(c.mkdir(path, c_ushort(mode)))
+}
 
